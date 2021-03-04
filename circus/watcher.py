@@ -909,7 +909,7 @@ class Watcher(object):
             self.call_hook('before_stop')
             yield self.kill_processes()
             if len(self.async_killing_futures) > 0:
-                yield self.async_killing_futures.values()
+                yield list(self.async_killing_futures.values())
                 self.async_killing_futures = {}
             self.reap_processes()
 
