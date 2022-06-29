@@ -108,7 +108,7 @@ else:
         raise E.with_traceback(sys.exc_info()[2])
 
     def is_callable(c):  # NOQA
-        return isinstance(c, collections.Callable)
+        return isinstance(c, collections.abc.Callable)
 
     def get_next(c):  # NOQA
         return c.__next__
