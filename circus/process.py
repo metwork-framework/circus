@@ -350,7 +350,8 @@ class Process(object):
             # On Windows we can't use a pre-exec function
             preexec_fn = None
         else:
-            preexec_fn = preexec
+            # preexec_fn = preexec ==> problems in some corny Metwork cases
+            preexec_fn = None
 
         extra = {}
         if self.pipe_stdout:
