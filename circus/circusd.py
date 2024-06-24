@@ -1,6 +1,9 @@
 import sys
 import argparse
 import os
+
+from circus.config import get_config
+
 try:
     import resource
 except ImportError:
@@ -121,6 +124,17 @@ def main():
     if args.daemonize:
         daemonize()
 
+    cfg = get_config(args.config)
+    loglevel_from_conf = cfg.get('loglevel', None)
+    logoutput_from_conf = cfg.get('logoutput', None)
+    loggerconfig_from_conf = cfg.get('loggerconfig', None)
+
+    # configure the logger
+    loglevel = args.loglevel or loglevel_from_conf or 'info'
+    logoutput = args.logoutput or logoutput_from_conf or '-'
+    loggerconfig = args.loggerconfig or loggerconfig_from_conf or None
+    configure_logger(logger, loglevel, logoutput, loggerconfig)
+
     # From here it can also come from the arbiter configuration
     # load the arbiter from config
     arbiter = Arbiter.load_from_config(args.config)
@@ -139,12 +153,6 @@ def main():
             print(str(e))
             sys.exit(1)
 
-    # configure the logger
-    loglevel = args.loglevel or arbiter.loglevel or 'info'
-    logoutput = args.logoutput or arbiter.logoutput or '-'
-    loggerconfig = args.loggerconfig or arbiter.loggerconfig or None
-    configure_logger(logger, loglevel, logoutput, loggerconfig)
-
     # Main loop
     restart = True
     while restart:
@@ -162,8 +170,10 @@ def main():
             pass
         finally:
             arbiter = None
-            if pidfile is not None:
+            # Do not delete pid file if not going to exit
+            if pidfile is not None and restart is False:
                 pidfile.unlink()
+
     sys.exit(0)
 
 

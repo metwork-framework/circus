@@ -1,12 +1,6 @@
-try:
-    from io import StringIO
-    from io import BytesIO
-except ImportError:
-    from cStringIO import StringIO  # NOQA
-try:
-    from configparser import ConfigParser
-except ImportError:
-    from ConfigParser import ConfigParser  # NOQA
+from io import StringIO
+from io import BytesIO
+from configparser import ConfigParser
 from circus.tests.support import TestCase
 from circus.tests.support import EasyTestSuite
 from circus.tests.support import skipIf, PYTHON, IS_WINDOWS
@@ -109,6 +103,7 @@ def run_circusd(options=(), config=(), log_capture_path="log.txt",
             # use (lock).
             pass
 
+
 EXAMPLE_YAML = """\
 version: 1
 disable_existing_loggers: false
@@ -206,7 +201,7 @@ class TestLoggingConfig(TestCase):
 
     @skipIf(not hasDictConfig(), "Needs logging.config.dictConfig()")
     def test_loggerconfig_yaml_ini(self):
-        config = yaml.load(EXAMPLE_YAML)
+        config = yaml.load(EXAMPLE_YAML, Loader=yaml.FullLoader)
         config["handlers"]["logfile"]["filename"] = "log_yaml_ini.txt"
         run_circusd(
             [], {"circus.loggerconfig": "logging.yaml"},
@@ -216,7 +211,7 @@ class TestLoggingConfig(TestCase):
 
     @skipIf(not hasDictConfig(), "Needs logging.config.dictConfig()")
     def test_loggerconfig_yaml_opt(self):
-        config = yaml.load(EXAMPLE_YAML)
+        config = yaml.load(EXAMPLE_YAML, Loader=yaml.FullLoader)
         config["handlers"]["logfile"]["filename"] = "log_yaml_opt.txt"
         run_circusd(
             ["--logger-config", "logging.yaml"], {},
@@ -226,7 +221,7 @@ class TestLoggingConfig(TestCase):
 
     @skipIf(not hasDictConfig(), "Needs logging.config.dictConfig()")
     def test_loggerconfig_json_ini(self):
-        config = yaml.load(EXAMPLE_YAML)
+        config = yaml.load(EXAMPLE_YAML, Loader=yaml.FullLoader)
         config["handlers"]["logfile"]["filename"] = "log_json_ini.txt"
         run_circusd(
             [], {"circus.loggerconfig": "logging.json"},
@@ -236,7 +231,7 @@ class TestLoggingConfig(TestCase):
 
     @skipIf(not hasDictConfig(), "Needs logging.config.dictConfig()")
     def test_loggerconfig_json_opt(self):
-        config = yaml.load(EXAMPLE_YAML)
+        config = yaml.load(EXAMPLE_YAML, Loader=yaml.FullLoader)
         config["handlers"]["logfile"]["filename"] = "log_json_opt.txt"
         run_circusd(
             ["--logger-config", "logging.json"], {},
@@ -245,7 +240,7 @@ class TestLoggingConfig(TestCase):
         )
 
     def test_loggerconfig_ini_ini(self):
-        config = yaml.load(EXAMPLE_YAML)
+        config = yaml.load(EXAMPLE_YAML, Loader=yaml.FullLoader)
         config["handlers"]["logfile"]["filename"] = "log_ini_ini.txt"
         run_circusd(
             [], {"circus.loggerconfig": "logging.ini"},
@@ -254,12 +249,13 @@ class TestLoggingConfig(TestCase):
         )
 
     def test_loggerconfig_ini_opt(self):
-        config = yaml.load(EXAMPLE_YAML)
+        config = yaml.load(EXAMPLE_YAML, Loader=yaml.FullLoader)
         config["handlers"]["logfile"]["filename"] = "log_ini_opt.txt"
         run_circusd(
             ["--logger-config", "logging.ini"], {},
             log_capture_path="log_ini_opt.txt",
             additional_files={"logging.ini": logging_dictconfig_to_ini(config)}
         )
+
 
 test_suite = EasyTestSuite(__name__)

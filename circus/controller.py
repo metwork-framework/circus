@@ -2,26 +2,23 @@ import os
 import sys
 import traceback
 import functools
-try:
-    from queue import Queue, Empty
-    from urllib.parse import urlparse
-except ImportError:
-    from Queue import Queue, Empty  # NOQA
-    from urlparse import urlparse  # NOQA
+from queue import Queue, Empty  # noqa: F401
+from urllib.parse import urlparse
 
 
 import zmq
 import zmq.utils.jsonapi as json
-from zmq.eventloop import ioloop, zmqstream
+from tornado import ioloop
+from zmq.eventloop import zmqstream
 from tornado.concurrent import Future
 
 from circus.util import create_udp_socket
 from circus.util import check_future_exception_and_log
 from circus.util import to_uid
+from circus.util import AsyncPeriodicCallback
 from circus.commands import get_commands, ok, error, errors
 from circus import logger
 from circus.exc import MessageError, ConflictError
-from circus.py3compat import string_types
 from circus.sighandler import SysHandler
 
 
@@ -38,7 +35,6 @@ class Controller(object):
         self.check_delay = check_delay * 1000
         self.endpoint_owner = endpoint_owner
         self.started = False
-        self._managing_watchers_future = None
 
         # initialize the sys handler
         self._init_syshandler()
@@ -92,28 +88,14 @@ class Controller(object):
         if self.multicast_endpoint:
             self._init_multicast_endpoint()
 
-    def manage_watchers(self):
-        if self._managing_watchers_future is not None:
-            logger.debug("manage_watchers is already running...")
-            return
-        try:
-            self._managing_watchers_future = self.arbiter.manage_watchers()
-            self.loop.add_future(self._managing_watchers_future,
-                                 self._manage_watchers_cb)
-        except ConflictError:
-            logger.debug("manage_watchers is conflicting with another command")
-
-    def _manage_watchers_cb(self, future):
-        self._managing_watchers_future = None
-
     def start(self):
         self.initialize()
         if self.check_delay > 0:
             # The specific case (check_delay < 0)
             # so with no period callback to manage_watchers
             # is probably "unit tests only"
-            self.caller = ioloop.PeriodicCallback(self.manage_watchers,
-                                                  self.check_delay, self.loop)
+            self.caller = AsyncPeriodicCallback(self.arbiter.manage_watchers,
+                                                self.check_delay)
             self.caller.start()
         self.started = True
 
@@ -130,7 +112,14 @@ class Controller(object):
         self.sys_hdl.stop()
 
     def handle_message(self, raw_msg):
-        cid, msg = raw_msg
+        try:
+            # Handle garbage messages,
+            # which are not originating from circus
+            cid, msg = raw_msg
+        except (TypeError, ValueError):
+            logger.warning("got unexpected message %s", raw_msg)
+            return
+
         msg = msg.strip()
 
         if not msg:
@@ -174,9 +163,7 @@ class Controller(object):
             if cid is not None:
                 self.stream.flush()
 
-            self.arbiter.stop()
-
-    def dispatch(self, job, future=None):
+    def dispatch(self, job):
         cid, msg = job
         try:
             json_msg = json.loads(msg)
@@ -217,20 +204,13 @@ class Controller(object):
             return self.send_error(mid, cid, msg, str(e), cast=cast,
                                    errno=errors.MESSAGE_ERROR)
         except ConflictError as e:
-            if self._managing_watchers_future is not None:
-                logger.debug("the command conflicts with running "
-                             "manage_watchers, re-executing it at "
-                             "the end")
-                cb = functools.partial(self.dispatch, job)
-                self.loop.add_future(self._managing_watchers_future, cb)
-                return
             # conflicts between two commands, sending error...
             return self.send_error(mid, cid, msg, str(e), cast=cast,
                                    errno=errors.COMMAND_ERROR)
         except OSError as e:
             return self.send_error(mid, cid, msg, str(e), cast=cast,
                                    errno=errors.OS_ERROR)
-        except:
+        except:  # noqa: E722
             exctype, value = sys.exc_info()[:2]
             tb = traceback.format_exc()
             reason = "command %r: %s" % (msg, value)
@@ -254,11 +234,13 @@ class Controller(object):
         if cid is None:
             return
 
-        if isinstance(resp, string_types):
+        if isinstance(resp, str):
             raise DeprecationWarning('Takes only a mapping')
 
         resp['id'] = mid
         resp = json.dumps(resp)
+
+        logger.debug("sending response %s", resp)
 
         try:
             self.stream.send(cid, zmq.SNDMORE)

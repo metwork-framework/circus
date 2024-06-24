@@ -5,24 +5,21 @@ import tornado
 from tempfile import mkstemp
 from time import time
 import zmq.utils.jsonapi as json
-import mock
-try:
-    from urllib.parse import urlparse
-except ImportError:
-    from urlparse import urlparse  # NOQA
+from unittest import mock
+from urllib.parse import urlparse
 
 from circus.arbiter import Arbiter
 from circus.client import AsyncCircusClient
+from circus.exc import AlreadyExist
 from circus.plugins import CircusPlugin
 from circus.tests.support import (TestCircus, async_poll_for, truncate_file,
                                   EasyTestSuite, skipIf, get_ioloop, SLEEP,
                                   PYTHON)
 from circus.util import (DEFAULT_ENDPOINT_DEALER, DEFAULT_ENDPOINT_MULTICAST,
-                         DEFAULT_ENDPOINT_SUB)
+                         DEFAULT_ENDPOINT_SUB, to_str, IS_WINDOWS)
 from circus.tests.support import (MockWatcher, has_circusweb,
                                   poll_for_callable, get_available_port)
 from circus import watcher as watcher_mod
-from circus.py3compat import s
 
 
 _GENERIC = os.path.join(os.path.dirname(__file__), 'generic.py')
@@ -38,7 +35,7 @@ class Plugin(CircusPlugin):
 
     def handle_recv(self, data):
         topic, msg = data
-        topic_parts = s(topic).split(".")
+        topic_parts = to_str(topic).split(".")
         watcher = topic_parts[1]
         action = topic_parts[2]
         with open(self.config['file'], 'a+') as f:
@@ -489,6 +486,7 @@ class TestTrainer(TestCircus):
         self.assertEqual(resp.get('status'), "active")
         yield self.stop_arbiter()
 
+    @skipIf(IS_WINDOWS, "Streams not supported on Windows")
     @tornado.testing.gen_test
     def test_plugins(self):
         fd, datafile = mkstemp()
@@ -502,6 +500,7 @@ class TestTrainer(TestCircus):
                                  loop=get_ioloop())
 
         def incr_processes(cli):
+            # return a coroutine if cli is Async
             return cli.send_message('incr', name='test')
 
         # wait for the plugin to be started
@@ -513,7 +512,7 @@ class TestTrainer(TestCircus):
         res = yield cli.send_message('list', name='test')
         self.assertEqual(len(res.get('pids')), 1)
 
-        incr_processes(cli)
+        yield incr_processes(cli)
         res = yield cli.send_message('list', name='test')
         self.assertEqual(len(res.get('pids')), 2)
         # wait for the plugin to receive the signal
@@ -521,7 +520,7 @@ class TestTrainer(TestCircus):
         self.assertTrue(res)
         truncate_file(datafile)
 
-        incr_processes(cli)
+        yield incr_processes(cli)
         res = yield cli.send_message('list', name='test')
         self.assertEqual(len(res.get('pids')), 3)
 
@@ -597,8 +596,7 @@ class TestTrainer(TestCircus):
         @tornado.gen.coroutine
         def _sleep(duration):
             called.append(duration)
-            loop = get_ioloop()
-            yield tornado.gen.Task(loop.add_timeout, time() + duration)
+            yield tornado.gen.sleep(duration)
 
         watcher_mod.tornado_sleep = _sleep
 
@@ -624,6 +622,21 @@ class TestArbiter(TestCircus):
         controller = "tcp://127.0.0.1:%d" % get_available_port()
         sub = "tcp://127.0.0.1:%d" % get_available_port()
         arbiter = Arbiter([], controller, sub, check_delay=-1)
+
+        callee = mock.MagicMock()
+
+        def callback(*args):
+            callee()
+            arbiter.stop()
+
+        arbiter.start(cb=callback)
+
+        self.assertEqual(callee.call_count, 1)
+
+    def test_start_with_callback_delay(self):
+        controller = "tcp://127.0.0.1:%d" % get_available_port()
+        sub = "tcp://127.0.0.1:%d" % get_available_port()
+        arbiter = Arbiter([], controller, sub, check_delay=1)
 
         callee = mock.MagicMock()
 
@@ -690,6 +703,23 @@ class TestArbiter(TestCircus):
         finally:
             yield arbiter.stop()
 
+    @tornado.testing.gen_test
+    def test_add_watcher_same_lowercase_names(self):
+        controller = "tcp://127.0.0.1:%d" % get_available_port()
+        sub = "tcp://127.0.0.1:%d" % get_available_port()
+        arbiter = Arbiter([], controller, sub, loop=get_ioloop(),
+                          check_delay=-1)
+        arbiter.add_watcher('foo', SLEEP % 5)
+        self.assertRaises(AlreadyExist, arbiter.add_watcher, 'Foo', SLEEP % 5)
+
+    @tornado.testing.gen_test
+    def test_ioloop_has_handle_callback_exception(self):
+        controller = "tcp://127.0.0.1:%d" % get_available_port()
+        sub = "tcp://127.0.0.1:%d" % get_available_port()
+        arbiter = Arbiter([], controller, sub, loop=get_ioloop(),
+                          check_delay=-1)
+        self.assertTrue(hasattr(arbiter.loop, 'handle_callback_exception'))
+
 
 @skipIf(not has_circusweb(), 'Tests for circus-web')
 class TestCircusWeb(TestCircus):
@@ -708,5 +738,6 @@ class TestCircusWeb(TestCircus):
                               arbiter.statuses, {'circushttpd': 'active'})
         finally:
             yield arbiter.stop()
+
 
 test_suite = EasyTestSuite(__name__)

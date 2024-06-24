@@ -1,4 +1,4 @@
-from mock import patch
+from unittest.mock import patch
 
 from circus.tests.support import TestCircus, EasyTestSuite
 from circus.plugins.flapping import Flapping
@@ -71,5 +71,6 @@ class TestFlapping(TestCircus):
 
         cast_mock.assert_called_with("stop", name="test")
         self.assertTrue(timer_mock.called)
+
 
 test_suite = EasyTestSuite(__name__)

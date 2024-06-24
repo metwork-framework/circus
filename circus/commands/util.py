@@ -1,5 +1,4 @@
 from circus.exc import ArgumentError, MessageError
-from circus.py3compat import string_types
 from circus import util
 import warnings
 try:
@@ -9,7 +8,7 @@ except ImportError:
 
 _HOOKS = ('before_start', 'after_start', 'before_stop', 'after_stop',
           'before_spawn', 'after_spawn', 'before_signal', 'after_signal',
-          'extended_stats')
+          'before_reap', 'after_reap', 'extended_stats')
 
 
 def convert_option(key, val):
@@ -122,7 +121,7 @@ def validate_option(key, val):
             raise MessageError("%r isn't a number" % key)
 
     elif key in ('uid', 'gid',):
-        if not isinstance(val, int) and not isinstance(val, string_types):
+        if not isinstance(val, int) and not isinstance(val, str):
             raise MessageError("%r isn't an integer or string" % key)
 
     elif key in ('send_hup', 'shell', 'copy_env', 'respawn', 'stop_children',
@@ -136,7 +135,7 @@ def validate_option(key, val):
             raise MessageError("%r isn't a valid object" % key)
 
         for k, v in val.items():
-            if not isinstance(v, string_types):
+            if not isinstance(v, str):
                 raise MessageError("%r isn't a string" % k)
 
     elif key == 'hooks':

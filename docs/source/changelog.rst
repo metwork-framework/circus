@@ -1,6 +1,110 @@
 Changelog history
 =================
 
+0.18.0 2022-11-17
+-----------------
+
+Dependencies
+............
+Remove support for the `papa` library (library last saw a release in 2016 and is incompatible with Python 3.10 and up) [[#1201]](https://github.com/circus-tent/circus/pull/1201)
+Add support for Python 3.10 [[#1195]](https://github.com/circus-tent/circus/pull/1195)
+Add support for Python 3.11 [[#1205]](https://github.com/circus-tent/circus/pull/1205)
+Update `nose` to `nose2` [[#1194]](https://github.com/circus-tent/circus/pull/1194)
+Remove `circus-web` [[#1194]](https://github.com/circus-tent/circus/pull/1194)
+
+DevOps
+......
+Adopt PEP 621 and use `pyproject.toml` for the build and install specification [[#1197]](https://github.com/circus-tent/circus/pull/1197)
+Add continuous-deployment workflow [[#1198]](https://github.com/circus-tent/circus/pull/1198)
+Add testing against PyPy 3.9 [[#1203]](https://github.com/circus-tent/circus/pull/1203)
+
+
+0.17.2 2022-10-23
+-----------------
+
+- Fix virtualenv loading with Python 3.10 [[#1170]](https://github.com/circus-tent/circus/pull/1170)
+- Add support for Python 3.9 and add Python 3.9 and PyPy 3.7 to CI flow [[#1182]](https://github.com/circus-tent/circus/pull/1182)
+- Add long_description_content_type as text/markdown so README is properly rendered on Pypi [[#1150]](https://github.com/circus-tent/circus/pull/1150)
+- Fix custom syslog destination [[#1160]](https://github.com/circus-tent/circus/pull/1160)
+- Add AsyncPeriodicCallback support async func [[#1168]](https://github.com/circus-tent/circus/pull/1168)
+- AsyncPeriodicCallback to replace PeriodicCallback [[#1168]](https://github.com/circus-tent/circus/pull/1168)
+- Update site_pkg in test_util to support Py3 paths and add Py3.9 venv [[#1168]](https://github.com/circus-tent/circus/pull/1168)
+- log more information when bad things happened [[#1176]](https://github.com/circus-tent/circus/pull/1176)
+- Patch to handle pypy venv site-packages directory  [[#1178]](https://github.com/circus-tent/circus/pull/1178)
+- Patch a handle_callback_exception method to arbiter ioloop if necessary [[#1180]](https://github.com/circus-tent/circus/pull/1180)
+- Add pypy38 to ci [[#1184]](https://github.com/circus-tent/circus/pull/1184)
+
+
+0.17.1 2020-09-18
+-----------------
+
+Fix packaging issue.
+
+0.17.0 2020-09-18
+-----------------
+This release removes support for Python 2.7 & 3.4, and adds support for
+Tornado 5+.
+
+- Improve resiliency of the Controller - #1142
+- Add CI tests for Mac OS via Github Actions - #1137, #1141
+- Fix encoding issue in the Watchdog plugin - #1136
+- Change ConfigParser to RawConfigParser to avoid interpolation errors - #1133
+- Drop support for tornado<5 and start using asyncio eventl loop - #1129, #1132
+- Fix mem_info readings to be more reliable - #1128
+- Drop support for Python 2.7 & 3.4 - #1126
+- Speedup reloadconfig for large number of sockets - #1121
+- Do not allow adding watchers with the same lowercase names - #1117
+- Do not delete pid file during restart - #1116
+- Fix graceful_timeout watcher config option type - #1115
+
+0.16.1 2019-12-27
+-----------------
+Fix packaging issue.
+
+0.16.0 2019-12-27
+-----------------
+This release remove support for Python 2.6 & 3.3, and add official support
+for Python 3.6, 3.7 & 3.8. It also adds support for PyZMQ 17+.
+
+- Remove support for Python 2.6 & 3.3 - #1110
+- Fix compatibility with PyZMQ 17+ - #1111
+- Fix compatibility for Python 3.6, 3.7 & 3.8 - #1079, #1085, #1113
+- Send add/remove events to plugins - #1086
+- Allow 'use_papa' to be called programmatically - #1083
+- Allow integer to be used for stop_signal in ini file - #1089
+- Add 'on_demand' option to watchers - #1089
+- Add before_reap and after_reap hooks - #1104
+
+0.15.0 2018-06-15
+-----------------
+This release fixes several bugs and explicitely mark Circus as incompatible
+with Tornado 5 & PyZMQ 17.
+
+- Born Tornado version to < 5 & PyZMQ version to < 17 - #1030, #1064, #1055
+- Fix 'papa_enpoint' config option - #1066
+- Circusctl returns non-zero exit code when command fails - #1001
+- Fix potential process leaking - #998
+- Fix behavior when increasing numprocesses - #997
+- Fix Watcher.reap_process - #1036
+- Coerce 'max_retry' value to int - #1008
+- Drop iowait from the requirements - #1003
+- Doc updates - #1022, #1013
+
+0.14.0 2016-08-12
+-----------------
+This release fixes several bugs and add new options to
+Circus sockets and watchers.
+
+- Add stdin_socket option to the watcher - #975
+- Add a blocking option to Circus sockets - #973
+- Ignore errors when parsing the Pidfile - #866, #969
+- Fixes for papa sockets - #930, #968
+- Remove I/O operations on closed files - #979, #980
+- Accept empty ini sections - #970
+- Send SIGKILL to children recursively - #986
+- Improve tests stability - #984
+- Doc updates - #982, #983, 985
+
 0.13 - 2016-01-27
 ----------
 This release brings Python 3.5 support, a better handling

@@ -1,33 +1,74 @@
 import copy
 import errno
+import functools
 import os
+import psutil
 import signal
-import time
 import sys
+import time
 from random import randint
 
-try:
-    from itertools import zip_longest as izip_longest
-except ImportError:
-    # noinspection PyUnresolvedReferences
-    from itertools import izip_longest  # NOQA
 import site
 from tornado import gen
 
 from psutil import NoSuchProcess, TimeoutExpired
 import zmq.utils.jsonapi as json
-from zmq.eventloop import ioloop
+from tornado import ioloop
 from functools import partial
 
 from circus.process import Process, DEAD_OR_ZOMBIE, UNEXISTING
-from circus.papa_process_proxy import PapaProcessProxy
 from circus import logger
 from circus import util
 from circus.stream import get_stream, Redirector
-from circus.stream.papa_redirector import PapaRedirector
 from circus.util import parse_env_dict, resolve_name, tornado_sleep, IS_WINDOWS
-from circus.util import papa
-from circus.py3compat import bytestring, is_callable, b, PY2
+
+
+def hard_abort():
+    try:
+        try:
+            logger.critical("Délais d'attente expiré, arrêt forcé")
+        except Exception:
+            pass
+        current_process = psutil.Process()
+        children = current_process.children(recursive=True)
+        for child in children:
+            try:
+                os.kill(child.pid, signal.SIGKILL)
+            except Exception:
+                pass
+    finally:
+        sys.exit(1)
+
+
+def suicide_if_except(fct):
+    @functools.wraps(fct)
+    def wrapped(*args, **kwargs):
+        try:
+            return fct(*args, **kwargs)
+        except Exception as e:
+            try:
+                logger.critical(f"Exception non récupérable: {e}", exc_info=sys.exc_info())
+            except Exception:
+                pass
+            signal.signal(signal.SIGALRM, hard_abort)
+            timeout = signal.alarm(0)
+            if timeout == 0:
+                timeout = 180
+            signal.alarm(timeout)
+            os.kill(os.getpid(), signal.SIGTERM)
+            current_process = psutil.Process()
+            children = current_process.children(recursive=True)
+            # On est pas certain de la stabilité de circus, donc on envoie un
+            # SIGTERM explicite aux enfants
+            for child in children:
+                try:
+                    os.kill(child.pid, signal.SIGTERM)
+                except Exception:
+                    pass
+            # Et on remet l'exception
+            raise
+
+    return wrapped
 
 
 class Watcher(object):
@@ -198,9 +239,6 @@ class Watcher(object):
 
     - **close_child_stderr**: If True, closes the stderr after the fork.
       default: False.
-
-    - **use_papa**: If True, use the papa process kernel for this process.
-      default: False.
     """
 
     def __init__(self, name, cmd, args=None, numprocesses=1, warmup_delay=0.,
@@ -215,8 +253,7 @@ class Watcher(object):
                  autostart=True, on_demand=False, virtualenv=None,
                  stdin_socket=None, close_child_stdin=True,
                  close_child_stdout=False,
-                 close_child_stderr=False, virtualenv_py_ver=None,
-                 use_papa=False, **options):
+                 close_child_stderr=False, virtualenv_py_ver=None, **options):
         self.name = name
         self.use_sockets = use_sockets
         self.on_demand = on_demand
@@ -254,12 +291,15 @@ class Watcher(object):
         self.close_child_stdin = close_child_stdin
         self.close_child_stdout = close_child_stdout
         self.close_child_stderr = close_child_stderr
-        self.use_papa = use_papa and papa is not None
-        self.loop = loop or ioloop.IOLoop.instance()
+        self.loop = loop or ioloop.IOLoop.current()
 
         if singleton and self.numprocesses not in (0, 1):
             raise ValueError("Cannot have %d processes with a singleton "
                              " watcher" % self.numprocesses)
+
+        if not singleton and self.numprocesses == 0:
+            logger.warning("Non-singleton watcher %s with numprocesses=0 "
+                           "won't start any process", self.name)
 
         if IS_WINDOWS:
             if self.stdout_stream or self.stderr_stream:
@@ -282,7 +322,7 @@ class Watcher(object):
                           "stdout_stream_conf", "on_demand",
                           "stderr_stream_conf", "max_age", "max_age_variance",
                           "close_child_stdin", "close_child_stdout",
-                          "close_child_stderr", "use_papa") +
+                          "close_child_stderr") +
                          tuple(options.keys()))
 
         if not working_dir:
@@ -323,7 +363,7 @@ class Watcher(object):
 
         self.rlimits = rlimits
         self.send_hup = send_hup
-        self.stop_signal = util.to_signum(stop_signal)
+        self.stop_signal = stop_signal
         self.stop_children = stop_children
         self.async_kill = async_kill
         self.sockets = self.evpub_socket = None
@@ -332,24 +372,17 @@ class Watcher(object):
         self._resolve_hooks(hooks)
         self._found_wids = []
 
-        if self.use_papa:
-            with papa.Papa() as p:
-                base_name = 'circus.{0}.*'.format(name.lower())
-                running = p.list_processes(base_name)
-                self._found_wids = [int(proc_name[len(base_name) - 1:])
-                                    for proc_name in running]
-
     def _reload_hook(self, key, hook, ignore_error):
         hook_name = key.split('.')[-1]
         self._resolve_hook(hook_name, hook, ignore_error, reload_module=True)
 
     @property
     def _redirector_class(self):
-        return PapaRedirector if self.use_papa else Redirector
+        return Redirector
 
     @property
     def _process_class(self):
-        return PapaProcessProxy if self.use_papa else Process
+        return Process
 
     def _reload_stream(self, key, val):
         parts = key.split('.', 1)
@@ -391,7 +424,7 @@ class Watcher(object):
 
     def _resolve_hook(self, name, callable_or_name, ignore_failure,
                       reload_module=False):
-        if is_callable(callable_or_name):
+        if callable(callable_or_name):
             self.hooks[name] = callable_or_name
         else:
             # will raise ImportError on failure
@@ -440,9 +473,11 @@ class Watcher(object):
     def notify_event(self, topic, msg):
         """Publish a message on the event publisher channel"""
 
-        name = bytestring(self.res_name)
+        name = self.res_name
 
-        multipart_msg = [b("watcher.%s.%s" % (name, topic)), json.dumps(msg)]
+        multipart_msg = [
+            ("watcher.%s.%s" % (name, topic)).encode('utf8'), json.dumps(msg)
+        ]
 
         if self.evpub_socket is not None and not self.evpub_socket.closed:
             self.evpub_socket.send_multipart(multipart_msg)
@@ -452,6 +487,10 @@ class Watcher(object):
         """ensure that the process is killed (and not a zombie)"""
         if pid not in self.processes:
             return
+
+        # We ignore the hook result
+        self.call_hook("before_reap", process_pid=pid, time=time.time())
+
         process = self.processes.pop(pid)
 
         timeout = 0.001
@@ -466,12 +505,13 @@ class Watcher(object):
                     continue
             else:
                 try:
-                    _, status = os.waitpid(pid, os.WNOHANG)
-                except OSError as e:
-                    if e.errno == errno.EAGAIN:
+                    resulting_pid, status = os.waitpid(pid, os.WNOHANG)
+                    if (resulting_pid, status) == (0, 0):
+                        status = None
                         time.sleep(timeout)
                         continue
-                    elif e.errno == errno.ECHILD:
+                except OSError as e:
+                    if e.errno == errno.ECHILD:
                         status = None
                     else:
                         raise
@@ -485,12 +525,13 @@ class Watcher(object):
                 # the underlying process.
                 logger.debug('reaping already dead process %s [%s]',
                              pid, self.name)
-                self.notify_event(
-                    "reap",
-                    {"process_pid": pid,
-                     "time": time.time(),
-                     "exit_code": process.returncode()})
+                msg = {"process_pid": pid,
+                       "time": time.time(),
+                       "exit_code": process.returncode()}
+                self.notify_event("reap", msg)
                 process.stop()
+                # We ignore the hook result
+                self.call_hook("after_reap", process_status=None, **msg)
                 return
 
         # get return code
@@ -518,14 +559,17 @@ class Watcher(object):
             exit_code = status
 
         # if the process is dead or a zombie try to definitely stop it.
-        if process.status in (DEAD_OR_ZOMBIE, UNEXISTING):
+        process_status = process.status
+        if process_status in (DEAD_OR_ZOMBIE, UNEXISTING):
             process.stop()
 
         logger.debug('reaping process %s [%s]', pid, self.name)
-        self.notify_event("reap",
-                          {"process_pid": pid,
-                           "time": time.time(),
-                           "exit_code": exit_code})
+        msg = {"process_pid": pid,
+               "time": time.time(),
+               "exit_code": exit_code}
+        self.notify_event("reap", msg)
+        # We ignore the hook result
+        self.call_hook("after_reap", process_status=process_status, **msg)
 
     @util.debuglog
     def reap_processes(self):
@@ -563,9 +607,9 @@ class Watcher(object):
             if self.respawn:
                 yield self.spawn_processes()
             elif not len(self.processes) and \
-                 not self.on_demand and \
-                 len(self.async_killing_futures) == 0:
-                yield self._stop(True)
+                    not self.on_demand and \
+                    len(self.async_killing_futures) == 0:
+                yield self._stop()
 
         # removing extra processes
         if len(self.processes) > self.numprocesses:
@@ -577,10 +621,11 @@ class Watcher(object):
                     self.processes.pop(process.pid)
                 else:
                     processes_to_kill.append(process)
+
             if self.async_kill:
                 for process in processes_to_kill:
-                    future = self.kill_process(process)
                     self.processes.pop(process.pid)
+                    future = self.kill_process(process)
                     self.async_killing_futures[process.pid] = future
                     self.loop.add_future(future,
                                          partial(self._async_kill_cb,
@@ -600,8 +645,8 @@ class Watcher(object):
                                            self.max_age_variance))]
         if self.async_kill:
             for process in expired_processes:
-                future = self.kill_process(process)
                 self.processes.pop(process.pid)
+                future = self.kill_process(process)
                 self.async_killing_futures[process.pid] = future
                 self.loop.add_future(future,
                                      partial(self._async_kill_cb,
@@ -653,9 +698,7 @@ class Watcher(object):
         # XXX should be cached
         if self.sockets is None:
             return {}
-        return dict((name, sock.fileno())
-                    for name, sock in self.sockets.items()
-                    if sock.use_papa == self.use_papa)
+        return dict((name, sock.fileno()) for name, sock in self.sockets.items())
 
     def _get_stdin_socket_fd(self):
         if self.stdin_socket is not None:
@@ -664,6 +707,7 @@ class Watcher(object):
                                 self.stdin_socket)
             return self.sockets[self.stdin_socket].fileno()
 
+    @suicide_if_except
     def spawn_process(self, recovery_wid=None):
         """Spawn process.
 
@@ -708,12 +752,8 @@ class Watcher(object):
                     self.stream_redirector.add_redirections(process)
 
                 self.processes[process.pid] = process
-                if isinstance(process.spawned_args, str):
-                    args = process.spawned_args
-                else:
-                    args = " ".join(process.spawned_args)
-                logger.info("process: %s launched under pid: %d" %
-                            (args, process.pid))
+                logger.debug('running %s process [pid %d]', self.name,
+                             process.pid)
                 if not self.call_hook('after_spawn', pid=process.pid):
                     self.kill_process(process)
                     del self.processes[process.pid]
@@ -723,9 +763,6 @@ class Watcher(object):
             # lead to bad infinite retries here
             except (OSError, ValueError) as e:
                 logger.warning('error in %r: %s', self.name, str(e))
-                if self.max_retry == -1:
-                    # to avoid an infinite retry
-                    return True
 
             if process is None:
                 nb_tries += 1
@@ -781,7 +818,7 @@ class Watcher(object):
         try:
             logger.debug("%s: kill process %s", self.name, process.pid)
             if self.stop_children:
-                self.send_signal_process(process, stop_signal, recursive=True)
+                self.send_signal_process(process, stop_signal)
             else:
                 self._send_signal(process, stop_signal)
                 self.notify_event("kill", {"process_pid": process.pid,
@@ -817,10 +854,11 @@ class Watcher(object):
         """
         active_processes = self.get_active_processes()
         try:
-            yield [self.kill_process(process,
-                                     stop_signal=stop_signal,
-                                     graceful_timeout=graceful_timeout)
-                   for process in active_processes]
+            futures = [self.kill_process(process,
+                       stop_signal=stop_signal,
+                       graceful_timeout=graceful_timeout)
+                       for process in active_processes]
+            yield gen.multi(futures)
         except OSError as e:
             if e.errno != errno.ESRCH:
                 raise
@@ -896,22 +934,20 @@ class Watcher(object):
 
     @util.debuglog
     @gen.coroutine
-    def _stop(self, close_output_streams=False, for_shutdown=False):
+    def _stop(self, close_output_streams=False):
         if self.is_stopped():
             return
         self._status = "stopping"
-        skip = for_shutdown and self.use_papa
-        if not skip:
-            logger.debug('stopping the %s watcher' % self.name)
-            logger.debug('gracefully stopping processes [%s] for %ss' % (
-                         self.name, self.graceful_timeout))
-            # We ignore the hook result
-            self.call_hook('before_stop')
-            yield self.kill_processes()
-            if len(self.async_killing_futures) > 0:
-                yield list(self.async_killing_futures.values())
-                self.async_killing_futures = {}
-            self.reap_processes()
+        logger.debug('stopping the %s watcher' % self.name)
+        logger.debug('gracefully stopping processes [%s] for %ss' % (
+                     self.name, self.graceful_timeout))
+        # We ignore the hook result
+        self.call_hook('before_stop')
+        yield self.kill_processes()
+        if len(self.async_killing_futures) > 0:
+            yield self.async_killing_futures.values()
+            self.async_killing_futures = {}
+        self.reap_processes()
 
         # stop redirectors
         if self.stream_redirector:
@@ -922,16 +958,12 @@ class Watcher(object):
                 self.stdout_stream.close()
             if self.stderr_stream and hasattr(self.stderr_stream, 'close'):
                 self.stderr_stream.close()
-        # notify about the stop
-        if skip:
-            logger.info('%s left running in papa', self.name)
-        else:
-            if self.evpub_socket is not None:
-                self.notify_event("stop", {"time": time.time()})
-            self._status = "stopped"
-            # We ignore the hook result
-            self.call_hook('after_stop')
-            logger.info('%s stopped', self.name)
+        if self.evpub_socket is not None:
+            self.notify_event("stop", {"time": time.time()})
+        self._status = "stopped"
+        # We ignore the hook result
+        self.call_hook('after_stop')
+        logger.info('%s stopped', self.name)
 
     def get_active_processes(self):
         """return a list of pids of active processes (not already stopped)"""
@@ -1161,12 +1193,7 @@ class Watcher(object):
             self.shell = val
             action = 1
         elif key == "env":
-            if PY2 and IS_WINDOWS:
-                # Windows on Python 2 does not accept Unicode values
-                # in env dictionary
-                self.env = dict((b(k), b(v)) for k, v in val.iteritems())
-            else:
-                self.env = val
+            self.env = val
             action = 1
         elif key == "cmd":
             self.cmd = val

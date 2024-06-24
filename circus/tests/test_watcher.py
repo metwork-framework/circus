@@ -16,7 +16,7 @@ except ImportError:
         captured_output = None  # NOQA
 
 import tornado
-import mock
+from unittest import mock
 
 from circus import logger
 from circus.process import RUNNING, UNEXISTING
@@ -26,9 +26,8 @@ from circus.tests.support import TestCircus, truncate_file
 from circus.tests.support import async_poll_for, EasyTestSuite
 from circus.tests.support import MagicMockFuture, skipIf, IS_WINDOWS
 from circus.tests.support import PYTHON
-from circus.util import get_python_version, tornado_sleep
+from circus.util import get_python_version, tornado_sleep, to_str
 from circus.watcher import Watcher
-from circus.py3compat import s
 
 if hasattr(signal, 'SIGKILL'):
     SIGKILL = signal.SIGKILL
@@ -245,7 +244,7 @@ class TestWatcherInitialization(TestCircus):
                 messages.append(m)
             except Queue.Empty:
                 pass
-            data = ''.join(s(m['data']) for m in messages)
+            data = ''.join(to_str(m['data']) for m in messages)
             if 'XYZ' in data:
                 resp = True
                 break
@@ -263,8 +262,7 @@ class TestWatcherInitialization(TestCircus):
             major = py_version[0]
             minor = py_version[1]
             wanted = os.path.join(venv, 'lib', 'python%d.%d' % (major, minor),
-                                  'site-packages',
-                                  'pip-7.7-py%d.%d.egg' % (major, minor))
+                                  'site-packages')
             ppath = watcher.watcher.env['PYTHONPATH']
         finally:
             yield watcher.stop()
@@ -319,7 +317,7 @@ class SomeWatcher(object):
         self.watcher = None
         self.kw = kw
         if loop is None:
-            self.loop = tornado.ioloop.IOLoop.instance()
+            self.loop = tornado.ioloop.IOLoop.current()
         else:
             self.loop = loop
 
@@ -376,7 +374,7 @@ class TestWatcherHooks(TestCircus):
         return self._create_circus(dummy_process,
                                    stdout_stream=stdout_stream,
                                    stderr_stream=stderr_stream,
-                                   hooks=hooks, debug=True, async=True)
+                                   hooks=hooks, debug=True, use_async=True)
 
     @tornado.gen.coroutine
     def _stop(self):
@@ -585,6 +583,29 @@ class TestWatcherHooks(TestCircus):
         yield self._test_hooks(behavior=FAILURE, status='stopped',
                                hook_name='after_spawn', call=self._stop)
 
+    def _hook_before_reap_kwargs_test_function(self, kwargs):
+        self.assertIn('process_pid', kwargs)
+        self.assertIn('time', kwargs)
+
+    @tornado.testing.gen_test
+    def test_before_reap(self):
+        func = self._hook_before_reap_kwargs_test_function
+        yield self._test_hooks(hook_name='before_reap',
+                               hook_kwargs_test_function=func)
+
+    def _hook_after_reap_kwargs_test_function(self, kwargs):
+        self.assertIn('process_pid', kwargs)
+        self.assertIn('time', kwargs)
+        self.assertEqual(-15, kwargs['exit_code'])
+        # process_status is None because process is stopped by circus
+        self.assertIsNone(kwargs['process_status'])
+
+    @tornado.testing.gen_test
+    def test_after_reap(self):
+        func = self._hook_after_reap_kwargs_test_function
+        yield self._test_hooks(hook_name='after_reap',
+                               hook_kwargs_test_function=func)
+
     @tornado.testing.gen_test
     def test_extended_stats(self):
         yield self._test_extended_stats()
@@ -601,7 +622,7 @@ class RespawnTest(TestCircus):
     def test_not_respawning(self):
         oneshot_process = 'circus.tests.test_watcher.oneshot_process'
         testfile, arbiter = self._create_circus(oneshot_process,
-                                                respawn=False, async=True)
+                                                respawn=False, use_async=True)
         yield arbiter.start()
         watcher = arbiter.watchers[-1]
         try:
@@ -648,5 +669,6 @@ class RespawnTest(TestCircus):
         yield watcher.manage_processes()
         # And be sure we don't spawn new processes in the meantime.
         self.assertFalse(watcher.spawn_processes.called)
+
 
 test_suite = EasyTestSuite(__name__)

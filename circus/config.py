@@ -1,4 +1,5 @@
 import glob
+import operator
 import os
 import signal
 import warnings
@@ -9,11 +10,10 @@ except ImportError:
     resource = None     # NOQA
 
 from circus import logger
-from circus.py3compat import sort_by_field
 from circus.util import (DEFAULT_ENDPOINT_DEALER, DEFAULT_ENDPOINT_SUB,
                          DEFAULT_ENDPOINT_MULTICAST, DEFAULT_ENDPOINT_STATS,
                          StrictConfigParser, replace_gnu_args, to_signum,
-                         to_bool, papa)
+                         to_bool)
 
 
 def watcher_defaults():
@@ -25,6 +25,7 @@ def watcher_defaults():
         'warmup_delay': 0,
         'executable': None,
         'working_dir': None,
+        'on_demand': False,
         'shell': False,
         'uid': None,
         'gid': None,
@@ -44,8 +45,7 @@ def watcher_defaults():
         'copy_path': False,
         'hooks': dict(),
         'respawn': True,
-        'autostart': True,
-        'use_papa': False}
+        'autostart': True}
 
 
 class DefaultConfigParser(StrictConfigParser):
@@ -95,7 +95,7 @@ def rlimit_value(val):
 
 
 def read_config(config_path):
-    cfg = DefaultConfigParser(interpolation=None)
+    cfg = DefaultConfigParser()
     with open(config_path) as f:
         if hasattr(cfg, 'read_file'):
             cfg.read_file(f)
@@ -182,7 +182,6 @@ def get_config(config_file):
     config['logoutput'] = dget('circus', 'logoutput')
     config['loggerconfig'] = dget('circus', 'loggerconfig', None)
     config['fqdn_prefix'] = dget('circus', 'fqdn_prefix', None, str)
-    config['papa_endpoint'] = dget('circus', 'fqdn_prefix', None, str)
 
     # Initialize watchers, plugins & sockets to manage
     watchers = []
@@ -226,7 +225,7 @@ def get_config(config_file):
                     watcher['executable'] = dget(section, 'executable', None,
                                                  str)
                 # default bool to False
-                elif opt in ('shell', 'send_hup', 'stop_children',
+                elif opt in ('on_demand', 'shell', 'send_hup', 'stop_children',
                              'close_child_stderr', 'use_sockets', 'singleton',
                              'copy_env', 'copy_path', 'close_child_stdout',
                              'async_kill'):
@@ -237,7 +236,7 @@ def get_config(config_file):
                     watcher['max_retry'] = dget(section, "max_retry", 5, int)
                 elif opt == 'graceful_timeout':
                     watcher['graceful_timeout'] = dget(
-                        section, "graceful_timeout", 30, int)
+                        section, "graceful_timeout", 30., float)
                 elif opt.startswith('stderr_stream') or \
                         opt.startswith('stdout_stream'):
                     stream_name, stream_opt = opt.split(".", 1)
@@ -247,14 +246,6 @@ def get_config(config_file):
                     watcher['rlimits'][limit] = rlimit_value(val)
                 elif opt == 'priority':
                     watcher['priority'] = dget(section, "priority", 0, int)
-                elif opt == 'use_papa' and dget(section, 'use_papa', False,
-                                                bool):
-                    if papa:
-                        watcher['use_papa'] = True
-                    else:
-                        warnings.warn("Config file says use_papa but the papa "
-                                      "module is missing.",
-                                      ImportWarning)
                 elif opt.startswith('hooks.'):
                     hook_name = opt[len('hooks.'):]
                     val = [elmt.strip() for elmt in val.split(',', 1)]
@@ -280,9 +271,10 @@ def get_config(config_file):
             watchers.append(watcher)
 
     # making sure we return consistent lists
-    sort_by_field(watchers)
-    sort_by_field(plugins)
-    sort_by_field(sockets)
+    name = operator.itemgetter('name')
+    watchers.sort(key=name)
+    plugins.sort(key=name)
+    sockets.sort(key=name)
 
     # Second pass to make sure env sections apply to all watchers.
 

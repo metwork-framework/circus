@@ -7,7 +7,6 @@ import tornado
 from circus.tests.support import TestCircus, EasyTestSuite, skipIf, IS_WINDOWS
 from circus.client import AsyncCircusClient
 from circus.stream import FileStream
-from circus.py3compat import get_next
 from circus.util import tornado_sleep
 
 
@@ -22,7 +21,7 @@ def run_process(*args, **kw):
                                                       os.getpid(), i))
             sys.stderr.flush()
             time.sleep(.25)
-    except:
+    except:  # noqa: E722
         return 1
 
 
@@ -81,12 +80,13 @@ class TestStatsClient(TestCircus):
         from circus.stats.client import StatsClient
         client = StatsClient(endpoint=self.arbiter.stats_endpoint)
 
-        next = get_next(client.iter_messages())
+        message_iterator = client.iter_messages()
 
         for i in range(10):
-            watcher, pid, stat = next()
+            watcher, pid, stat = next(message_iterator)
             self.assertTrue(watcher in ('test', 'circusd-stats', 'circus'),
                             watcher)
         yield self.stop_arbiter()
+
 
 test_suite = EasyTestSuite(__name__)
