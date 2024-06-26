@@ -3,7 +3,7 @@ import time
 from collections import defaultdict
 from circus.fixed_threading import Thread
 
-from zmq.eventloop import ioloop
+from tornado import ioloop
 
 from circus.stats import collector as collector_module
 from circus.stats.collector import SocketStatsCollector, WatcherStatsCollector
@@ -72,6 +72,7 @@ class TestCollector(TestCase):
                 this.daemon = True
 
             def run(self):
+                self.loop.make_current()
                 collector = collector_class(
                     self.streamer, 'sockets', callback_time=0.1,
                     io_loop=self.loop)

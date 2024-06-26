@@ -7,7 +7,8 @@ import argparse
 
 import zmq
 import zmq.utils.jsonapi as json
-from zmq.eventloop import ioloop, zmqstream
+from tornado import ioloop
+from zmq.eventloop import zmqstream
 
 from circus import logger, __version__
 from circus.client import make_message, cast_message
@@ -58,6 +59,7 @@ class CircusPlugin(object):
 
     @debuglog
     def start(self):
+        self.loop.make_current()
         if not self.active:
             raise ValueError('Will not start an inactive plugin')
         self.handle_init()

@@ -16,7 +16,7 @@ from tornado import gen
 
 from psutil import NoSuchProcess, TimeoutExpired
 import zmq.utils.jsonapi as json
-from zmq.eventloop import ioloop
+from tornado import ioloop
 from functools import partial
 
 from circus.process import Process, DEAD_OR_ZOMBIE, UNEXISTING
@@ -255,7 +255,7 @@ class Watcher(object):
         self.close_child_stdout = close_child_stdout
         self.close_child_stderr = close_child_stderr
         self.use_papa = use_papa and papa is not None
-        self.loop = loop or ioloop.IOLoop.instance()
+        self.loop = loop or ioloop.IOLoop.current()
 
         if singleton and self.numprocesses not in (0, 1):
             raise ValueError("Cannot have %d processes with a singleton "
