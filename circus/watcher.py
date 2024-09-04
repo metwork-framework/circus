@@ -363,7 +363,7 @@ class Watcher(object):
 
         self.rlimits = rlimits
         self.send_hup = send_hup
-        self.stop_signal = stop_signal
+        self.stop_signal = util.to_signum(stop_signal)
         self.stop_children = stop_children
         self.async_kill = async_kill
         self.sockets = self.evpub_socket = None
@@ -818,9 +818,9 @@ class Watcher(object):
         try:
             logger.debug("%s: kill process %s", self.name, process.pid)
             if self.stop_children:
-                self.send_signal_process(process, util.to_signum(stop_signal))
+                self.send_signal_process(process, stop_signal)
             else:
-                self._send_signal(process, util.to_signum(stop_signal))
+                self._send_signal(process, stop_signal)
                 self.notify_event("kill", {"process_pid": process.pid,
                                            "time": time.time()})
         except NoSuchProcess:
