@@ -624,8 +624,8 @@ class Watcher(object):
 
             if self.async_kill:
                 for process in processes_to_kill:
-                    self.processes.pop(process.pid)
                     future = self.kill_process(process)
+                    self.processes.pop(process.pid)
                     self.async_killing_futures[process.pid] = future
                     self.loop.add_future(future,
                                          partial(self._async_kill_cb,
@@ -645,8 +645,8 @@ class Watcher(object):
                                            self.max_age_variance))]
         if self.async_kill:
             for process in expired_processes:
-                self.processes.pop(process.pid)
                 future = self.kill_process(process)
+                self.processes.pop(process.pid)
                 self.async_killing_futures[process.pid] = future
                 self.loop.add_future(future,
                                      partial(self._async_kill_cb,
@@ -752,8 +752,12 @@ class Watcher(object):
                     self.stream_redirector.add_redirections(process)
 
                 self.processes[process.pid] = process
-                logger.debug('running %s process [pid %d]', self.name,
-                             process.pid)
+                if isinstance(process.spawned_args, str):
+                    args = process.spawned_args
+                else:
+                    args = " ".join(process.spawned_args)
+                logger.info("process: %s launched under pid: %d" %
+                            (args, process.pid))
                 if not self.call_hook('after_spawn', pid=process.pid):
                     self.kill_process(process)
                     del self.processes[process.pid]
@@ -948,7 +952,7 @@ class Watcher(object):
         self.call_hook('before_stop')
         yield self.kill_processes()
         if len(self.async_killing_futures) > 0:
-            yield self.async_killing_futures.values()
+            yield list(self.async_killing_futures.values())
             self.async_killing_futures = {}
         self.reap_processes()
 
