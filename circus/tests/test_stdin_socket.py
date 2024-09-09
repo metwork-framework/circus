@@ -64,8 +64,10 @@ class StdinSocketTest(TestCircus):
         try:
             # expecting exception for no such socket
             yield self.start_arbiter(stdin_socket='test')
-        except Exception:
-            raised = True
+        except Exception as e:
+            print("test_stdin_socket_missing_raises exception %s", e)
+            #raised = True
+            pass
         self.assertTrue(raised)
 
         yield self.stop_arbiter()
