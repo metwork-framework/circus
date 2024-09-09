@@ -385,6 +385,8 @@ class Arbiter(object):
                 # changed, just changes this
                 yield w.set_numprocesses(int(new_watcher_cfg['numprocesses']))
                 changed = False
+            elif diff == set(['autostart']):
+                changed = False
             else:
                 changed = len(diff) > 0
 
