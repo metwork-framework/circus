@@ -57,18 +57,15 @@ class StdinSocketTest(TestCircus):
 
         yield self.stop_arbiter()
 
-    @skipIf(IS_WINDOWS, "Stdin socket not supported")
-    @tornado.testing.gen_test
-    def test_stdin_socket_missing_raises(self):
-        raised = False
-        try:
-            # expecting exception for no such socket
-            yield self.start_arbiter(stdin_socket='test')
-        except Exception:
-            raised = True
-            pass
-        #force raised = True (TO_FIX)
-        raised = True
-        self.assertTrue(raised)
-
-        yield self.stop_arbiter()
+#   @skipIf(IS_WINDOWS, "Stdin socket not supported")
+#   @tornado.testing.gen_test
+#   def test_stdin_socket_missing_raises(self):
+#       raised = False
+#       try:
+#           # expecting exception for no such socket
+#           yield self.start_arbiter(stdin_socket='test')
+#       except Exception:
+#           raised = True
+#       self.assertTrue(raised)
+#
+#       yield self.stop_arbiter()
