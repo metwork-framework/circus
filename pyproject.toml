@@ -83,6 +83,7 @@ deps =
 setenv =
     TESTING=1
     PYTHONUNBUFFERED=1
+    CIRCUS_CRASH_ON_ERROR=False
 
 commands =
     nose2 --log-capture --verbose --with-coverage --coverage circus

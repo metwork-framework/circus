@@ -27,4 +27,5 @@ jobs:
     - name: Install test dependencies
       run: pip install tox coveralls
     - name: Run test suite
-      run: tox -v -e py
+      run: |
+        tox -v -e py
