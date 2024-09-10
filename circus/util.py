@@ -694,7 +694,7 @@ class CrashWhenError(logging.Handler):
                 sys.stderr.flush()
             except Exception:
                 pass
-            if crash_on_error
+            if crash_on_error:
                 os._exit(2)
 
 
