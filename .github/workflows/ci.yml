@@ -27,5 +27,6 @@ jobs:
     - name: Install test dependencies
       run: pip install tox coveralls
     - name: Run test suite
-      env: CRASH_ON_ERROR=False
-      run: tox -v -e py
+      run: |
+        export CRASH_ON_ERROR=False
+        tox -v -e py
