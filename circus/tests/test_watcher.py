@@ -278,19 +278,19 @@ class TestWatcherInitialization(TestCircus):
     def test_venv_site_packages(self):
         venv = os.path.join(os.path.dirname(__file__), 'venv')
         watcher = SomeWatcher(virtualenv=venv)
+        py_version = get_python_version()
+        major = py_version[0]
+        minor = py_version[1]
+        wanted = os.path.join(venv, 'lib', 'python%d.%d' % (major, minor),
+                              'site-packages')
+        if not os.path.exists(wanted):
+            print("JBV os.makedirs ", wanted)
+            os.makedirs(wanted)
+        else:
+            print("JBV existing ", wanted)
         yield watcher.run()
         try:
             yield tornado_sleep(1)
-            py_version = get_python_version()
-            major = py_version[0]
-            minor = py_version[1]
-            wanted = os.path.join(venv, 'lib', 'python%d.%d' % (major, minor),
-                                  'site-packages')
-            if not os.path.exists(wanted):
-                print("JBV os.makedirs ", wanted)
-                os.makedirs(wanted)
-            else:
-                print("JBV existing ", wanted)
             ppath = watcher.watcher.env['PYTHONPATH']
         finally:
             yield watcher.stop()
