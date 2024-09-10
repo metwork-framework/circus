@@ -628,38 +628,27 @@ class RespawnTest(TestCircus):
     @tornado.testing.gen_test
     def test_not_respawning(self):
         oneshot_process = 'circus.tests.test_watcher.oneshot_process'
-        print("JBV 0")
         testfile, arbiter = self._create_circus(oneshot_process,
                                                 respawn=False,
                                                 use_async=True)
-        print("JBV 1")
         yield arbiter.start()
-        print("JBV 2")
         watcher = arbiter.watchers[-1]
-        print("JBV 3")
         try:
             # Per default, we shouldn't respawn processes,
             # so we should have one process, even if in a dead state.
             resp = yield self.call("numprocesses", name="test")
-            print("numprocesses : ", resp['numprocesses'])
             self.assertEqual(resp['numprocesses'], 1)
-            print("JBV 4")
 
             # let's reap processes and explicitely ask for process management
             yield watcher.reap_and_manage_processes()
-            print("JBV 5")
 
             # we should have zero processes (the process shouldn't respawn)
-            print("numprocesses : ", len(watcher.processes))
             self.assertEqual(len(watcher.processes), 0)
-            print("JBV 6")
 
             # If we explicitely ask the watcher to respawn its processes,
             # ensure it's doing so.
             yield watcher.start()
-            print("numprocesses : ", len(watcher.processes))
             self.assertEqual(len(watcher.processes), 1)
-            print("JBV 7")
         finally:
             yield arbiter.stop()
 
