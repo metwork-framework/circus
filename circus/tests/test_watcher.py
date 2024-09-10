@@ -301,10 +301,10 @@ class TestWatcherInitialization(TestCircus):
         venv = os.path.join(os.path.dirname(__file__), 'venv')
         wanted = os.path.join(venv, 'lib', 'python%s' % py_ver,
                               'site-packages')
-        if not os.path.exists(wanted):
-            os.makedirs(wanted)
         watcher = SomeWatcher(virtualenv=venv, virtualenv_py_ver=py_ver)
         yield watcher.run()
+        if not os.path.exists(wanted):
+            os.makedirs(wanted)
         try:
             yield tornado_sleep(1)
             ppath = watcher.watcher.env['PYTHONPATH']
