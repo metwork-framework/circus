@@ -299,14 +299,14 @@ class TestWatcherInitialization(TestCircus):
     def test_venv_py_ver(self):
         py_ver = "my_py_ver"
         venv = os.path.join(os.path.dirname(__file__), 'venv')
-        wanted = os.path.join(venv, 'lib', 'python%s' % py_ver,
-                              'site-packages')
         watcher = SomeWatcher(virtualenv=venv, virtualenv_py_ver=py_ver)
-        yield watcher.run()
-        if not os.path.exists(wanted):
-            os.makedirs(wanted)
         try:
             yield tornado_sleep(1)
+            wanted = os.path.join(venv, 'lib', 'python%s' % py_ver,
+                                  'site-packages')
+            if not os.path.exists(wanted):
+                os.makedirs(wanted)
+            yield watcher.run()
             ppath = watcher.watcher.env['PYTHONPATH']
         finally:
             yield watcher.stop()
