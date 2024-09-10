@@ -40,6 +40,9 @@ warnings.filterwarnings('ignore',
 
 class FakeProcess(object):
 
+    def send_signal(signum):
+        pass
+
     def __init__(self, pid, status, started=1, age=1):
         self.status = status
         self.pid = pid
@@ -61,9 +64,6 @@ class FakeProcess(object):
         pass
 
     def wait(self, *args, **kwargs):
-        pass
-
-    def send_signal(signum):
         pass
 
 class TestWatcher(TestCircus):
