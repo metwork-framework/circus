@@ -688,7 +688,7 @@ class CrashWhenError(logging.Handler):
         if record.levelno >= logging.ERROR:
             try:
                 sys.stderr.write("log with level >= logging.ERROR detected\n")
-                sys.stderr.write("    => we will stop here")
+                #sys.stderr.write("    => we will stop here\n")
                 sys.stderr.flush()
             except Exception:
                 pass
