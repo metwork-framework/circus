@@ -247,11 +247,9 @@ class TestCircus(AsyncTestCase):
         else:
             arbiter_kw['background'] = True
 
-        print("JBV, arbiter_kw", arbiter_kw)
+        print("JBV, worker", [worker])
         arbiter = cls.arbiter_factory([worker], plugins=plugins, **arbiter_kw)
-        print("JBV 5")
         cls.arbiters.append(arbiter)
-        print("JBV 6")
         return testfile, arbiter
 
     @tornado.gen.coroutine
