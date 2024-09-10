@@ -686,13 +686,16 @@ class CrashWhenError(logging.Handler):
 
     def emit(self, record):
         if record.levelno >= logging.ERROR:
+            crash_on_error = os.getenv("CRASH_ON_ERROR", True)
             try:
                 sys.stderr.write("log with level >= logging.ERROR detected\n")
-                #sys.stderr.write("    => we will stop here\n")
+                if crash_on_error
+                    sys.stderr.write("    => we will stop here\n")
                 sys.stderr.flush()
             except Exception:
                 pass
-            #os._exit(2)
+            if crash_on_error
+                os._exit(2)
 
 
 def configure_logger(logger, level='INFO', output="-", loggerconfig=None,
