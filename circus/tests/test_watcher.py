@@ -289,6 +289,8 @@ class TestWatcherInitialization(TestCircus):
             if not os.path.exists(wanted):
                 print("JBV os.makedirs ", wanted)
                 os.makedirs(wanted)
+            else:
+                print("JBV existing ", wanted)
             ppath = watcher.watcher.env['PYTHONPATH']
         finally:
             yield watcher.stop()
