@@ -10,14 +10,14 @@ import time
 import traceback
 import json
 import struct
+from inspect import isawaitable
+
+import tornado
+
 try:
     import yaml
 except ImportError:
     yaml = None  # NOQA
-try:
-    import papa
-except ImportError:
-    papa = None  # NOQA
 try:
     import pwd
     import grp
@@ -26,24 +26,15 @@ except ImportError:
     fcntl = None
     grp = None
     pwd = None
-from tornado.ioloop import IOLoop
 from tornado import gen
 from tornado import concurrent
-from circus.py3compat import (
-    integer_types, bytestring, raise_with_tb, text_type
+from tornado.ioloop import PeriodicCallback
+
+from configparser import (
+    RawConfigParser, MissingSectionHeaderError, ParsingError, DEFAULTSECT
 )
-try:
-    from configparser import (
-        ConfigParser, MissingSectionHeaderError, ParsingError, DEFAULTSECT
-    )
-except ImportError:
-    from ConfigParser import (  # NOQA
-        ConfigParser, MissingSectionHeaderError, ParsingError, DEFAULTSECT
-    )
-try:
-    from urllib.parse import urlparse
-except ImportError:
-    from urlparse import urlparse  # NOQA
+
+from urllib.parse import urlparse
 
 from datetime import timedelta
 from functools import wraps
@@ -63,7 +54,6 @@ from psutil import AccessDenied, NoSuchProcess, Process
 
 from circus.exc import ConflictError
 from circus import logger
-from circus.py3compat import string_types
 
 
 # default endpoints
@@ -135,7 +125,7 @@ def get_working_dir():
 def bytes2human(n):
     """Translates bytes into a human repr.
     """
-    if not isinstance(n, integer_types):
+    if not isinstance(n, int):
         raise TypeError(n)
 
     prefix = {}
@@ -144,8 +134,8 @@ def bytes2human(n):
 
     for s in reversed(_SYMBOLS):
         if n >= prefix[s]:
-            value = int(float(n) / prefix[s])
-            return '%s%s' % (value, s)
+            value = round(float(n) / prefix[s], 2)
+            return '{:.2f}{}'.format(value, s)
     return "%sB" % n
 
 
@@ -293,6 +283,7 @@ def get_info(process=None, interval=0, with_childs=False):
 
     return info
 
+
 TRUTHY_STRINGS = ('yes', 'true', 'on', '1')
 FALSY_STRINGS = ('no', 'false', 'off', '0')
 
@@ -343,6 +334,21 @@ def to_signum(signum):
     raise ValueError('signal invalid: {}'.format(signum))
 
 
+def to_str(s, encoding='utf8', errors='replace'):
+    """cast bytes or string to string.
+    errors options are strict, ignore or replace"""
+    if isinstance(s, bytes):
+        return s.decode(encoding, errors=errors)
+    return str(s)
+
+
+def to_bytes(s, encoding='utf8'):  # NOQA
+    """cast str or bytes to bytes"""
+    if isinstance(s, bytes):
+        return s
+    return str(s).encode(encoding)
+
+
 if pwd is None:
 
     def to_uid(name):
@@ -368,7 +374,7 @@ else:
             except KeyError:
                 raise ValueError("%r isn't a valid user id" % name)
 
-        if not isinstance(name, string_types):
+        if not isinstance(name, str):
             raise TypeError(name)
 
         try:
@@ -403,7 +409,7 @@ else:
             except (KeyError, OverflowError):
                 raise ValueError("No such group: %r" % name)
 
-        if not isinstance(name, string_types):
+        if not isinstance(name, str):
             raise TypeError(name)
 
         try:
@@ -572,8 +578,6 @@ def resolve_name(import_name, silent=False, reload=False):
                    reloaded
     :return: imported object
     """
-    # force the import name to automatically convert to strings
-    import_name = bytestring(import_name)
     try:
         if ':' in import_name:
             module, obj = import_name.split(':', 1)
@@ -615,10 +619,12 @@ def resolve_name(import_name, silent=False, reload=False):
             return __import__(import_name)
     except ImportError as e:
         if not silent:
-            raise_with_tb(ImportStringError(import_name, e))
+            raise ImportStringError(import_name, e).with_traceback(
+                sys.exc_info()[2]
+            )
 
 
-_SECTION_NAME = '\w\.\-'
+_SECTION_NAME = r'\w\.\-'
 _PATTERN1 = r'\$\(%%s\.([%s]+)\)' % _SECTION_NAME
 _PATTERN2 = r'\(\(%%s\.([%s]+)\)\)' % _SECTION_NAME
 _CIRCUS_VAR = re.compile(_PATTERN1 % 'circus' + '|' +
@@ -682,11 +688,11 @@ class CrashWhenError(logging.Handler):
         if record.levelno >= logging.ERROR:
             try:
                 sys.stderr.write("log with level >= logging.ERROR detected\n")
-                sys.stderr.write("    => we will stop here")
+                #sys.stderr.write("    => we will stop here\n")
                 sys.stderr.flush()
             except Exception:
                 pass
-            os._exit(2)
+            #os._exit(2)
 
 
 def configure_logger(logger, level='INFO', output="-", loggerconfig=None,
@@ -702,10 +708,13 @@ def configure_logger(logger, level='INFO', output="-", loggerconfig=None,
             # URLs are syslog://host[:port]?facility or syslog:///path?facility
             info = urlparse(output)
             facility = 'user'
+
+            # find out the specified facility
             if info.query in logging.handlers.SysLogHandler.facility_names:
                 facility = info.query
+
             if info.netloc:
-                address = (info.netloc, info.port or 514)
+                address = (info.hostname, info.port or 514)
             else:
                 address = info.path
             datefmt = LOG_DATE_SYSLOG_FMT
@@ -750,7 +759,9 @@ def configure_logger(logger, level='INFO', output="-", loggerconfig=None,
                                 "Try: pip install PyYAML"
                                 % (shell_escape_arg(loggerconfig),))
             with open(loggerconfig, "r") as fh:
-                logging.config.dictConfig(yaml.load(fh.read()))
+                logging.config.dictConfig(
+                    yaml.load(fh.read(), Loader=yaml.FullLoader)
+                )
         else:
             raise Exception("Logger configuration file %s is not in one "
                             "of the recognized formats.  The file name "
@@ -758,7 +769,7 @@ def configure_logger(logger, level='INFO', output="-", loggerconfig=None,
                             % (shell_escape_arg(loggerconfig),))
 
 
-class StrictConfigParser(ConfigParser):
+class StrictConfigParser(RawConfigParser):
 
     def _read(self, fp, fpname):
         cursect = None                        # None, or a dictionary
@@ -803,13 +814,10 @@ class StrictConfigParser(ConfigParser):
                     raise MissingSectionHeaderError(fpname, lineno, line)
                 # an option line?
                 else:
-                    try:
-                        mo = self._optcre.match(line)   # 2.7
-                    except AttributeError:
-                        mo = self.OPTCRE.match(line)    # 2.6
+                    mo = self._optcre.match(line)   # 2.7
                     if mo:
                         optname, vi, optval = mo.group('option', 'vi', 'value')
-                        self.optionxform = text_type
+                        self.optionxform = str
                         optname = self.optionxform(optname.rstrip())
                         # We don't want to override.
                         if optname in cursect:
@@ -873,14 +881,22 @@ def load_virtualenv(watcher, py_ver=None):
         raise ValueError('copy_env must be True to to use virtualenv')
 
     if not py_ver:
-        py_ver = sys.version.split()[0][:3]
+        py_ver = "%s.%s" % sys.version_info[:2]
 
-    # XXX Posix scheme - need to add others
-    sitedir = os.path.join(watcher.virtualenv, 'lib', 'python' + py_ver,
-                           'site-packages')
+    def determine_sitedir():
+        try_dirs = ['python', 'pypy']
+        tried_dirs = []
+        for try_dir in try_dirs:
+            # XXX Posix scheme - need to add others
+            _sitedir = os.path.join(watcher.virtualenv, 'lib', '%s%s' % (try_dir, py_ver),
+                                    'site-packages')
+            tried_dirs.append(_sitedir)
+            if os.path.exists(_sitedir):
+                return _sitedir
 
-    if not os.path.exists(sitedir):
-        raise ValueError("%s does not exist" % sitedir)
+        raise ValueError("%s does not exist" % ','.join(tried_dirs))
+
+    sitedir = determine_sitedir()
 
     bindir = os.path.join(watcher.virtualenv, 'bin')
 
@@ -891,7 +907,7 @@ def load_virtualenv(watcher, py_ver=None):
         packages = set()
         fullname = os.path.join(sitedir, name)
         try:
-            f = open(fullname, "rU")
+            f = open(fullname, "r")
         except IOError:
             return
         with f:
@@ -1041,7 +1057,7 @@ def synchronized(name):
             finally:
                 if isinstance(resp, concurrent.Future):
                     cb = functools.partial(_synchronized_cb, arbiter)
-                    resp.add_done_callback(cb)
+                    concurrent.future_add_done_callback(resp, cb)
                 else:
                     if arbiter is not None:
                         arbiter._exclusive_running_command = None
@@ -1056,7 +1072,7 @@ def tornado_sleep(duration):
     To use with a gen.coroutines decorated function
     Thanks to http://stackoverflow.com/a/11135204/433050
     """
-    return gen.Task(IOLoop.instance().add_timeout, time.time() + duration)
+    return gen.sleep(duration)
 
 
 class TransformableFuture(concurrent.Future):
@@ -1107,3 +1123,23 @@ def check_future_exception_and_log(future):
                 traceback.print_tb(exc_info[2])
             logger.error("exception %s caught" % exception)
             return exception
+
+
+if tornado.version_info[:2] >= (6, 2):
+    AsyncPeriodicCallback = PeriodicCallback
+else:
+    class AsyncPeriodicCallback(PeriodicCallback):
+
+        @gen.coroutine
+        def _run(self):
+            if not self._running:
+                return
+
+            try:
+                val = self.callback()
+                if val is not None and isawaitable(val):
+                    yield val
+            except Exception:
+                self.io_loop.handle_callback_exception(self.callback)
+            finally:
+                self._schedule_next()

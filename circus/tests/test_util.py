@@ -13,7 +13,7 @@ except ImportError:
 
 import psutil
 from psutil import Popen
-import mock
+from unittest import mock
 
 from circus.tests.support import (TestCase, EasyTestSuite, skipIf,
                                   IS_WINDOWS, SLEEP)
@@ -92,8 +92,10 @@ class TestUtil(TestCase):
         self.assertEqual(util.convert_opt('test', 1), '1')
 
     def test_bytes2human(self):
-        self.assertEqual(bytes2human(10000), '9K')
-        self.assertEqual(bytes2human(100001221), '95M')
+        self.assertEqual(bytes2human(100), '100B')
+        self.assertEqual(bytes2human(10000), '9.77K')
+        self.assertEqual(bytes2human(100001221), '95.37M')
+        self.assertEqual(bytes2human(1024 * 1024 * 2047), '2.00G')
         self.assertRaises(TypeError, bytes2human, '1')
 
     def test_human2bytes(self):
@@ -102,6 +104,8 @@ class TestUtil(TestCase):
         self.assertEqual(human2bytes('1129M'), 1183842304)
         self.assertEqual(human2bytes('67T'), 73667279060992)
         self.assertEqual(human2bytes('13P'), 14636698788954112)
+        self.assertEqual(human2bytes('1.99G'), 2136746229)
+        self.assertEqual(human2bytes('2.00G'), 2147483648)
         self.assertRaises(ValueError, human2bytes, '')
         self.assertRaises(ValueError, human2bytes, 'faoej')
         self.assertRaises(ValueError, human2bytes, '123KB')
@@ -276,13 +280,14 @@ class TestUtil(TestCase):
         # we want virtualenv directory to contain a site-packages
         self.assertRaises(ValueError, load_virtualenv, watcher)
 
-        py_ver = sys.version.split()[0][:3]
+        py_ver = "%s.%s" % sys.version_info[:2]
         site_pkg = os.path.join(watcher.virtualenv, 'lib',
                                 'python%s' % py_ver, 'site-packages')
         os.makedirs(site_pkg)
         watcher.env = {}
         load_virtualenv(watcher)
         self.assertEqual(site_pkg, watcher.env['PYTHONPATH'])
+        os.removedirs(site_pkg)
 
         # test with a specific python version for the virtualenv site packages
         py_ver = "my_python_version"
@@ -292,6 +297,18 @@ class TestUtil(TestCase):
         watcher.env = {}
         load_virtualenv(watcher, py_ver=py_ver)
         self.assertEqual(site_pkg, watcher.env['PYTHONPATH'])
+        os.removedirs(site_pkg)
+
+        # test with a pypy virtual environment
+        watcher.env = {}
+        py_ver = "%s.%s" % sys.version_info[:2]
+        site_pkg_pypy = os.path.join(watcher.virtualenv, 'lib',
+                                     'pypy%s' % py_ver, 'site-packages')
+
+        os.makedirs(site_pkg_pypy)
+        load_virtualenv(watcher, py_ver=py_ver)
+        self.assertEqual(site_pkg_pypy, watcher.env['PYTHONPATH'])
+        os.removedirs(site_pkg_pypy)
 
     @mock.patch('circus.util.os.environ', {'PWD': '/path/to/pwd'})
     @mock.patch('circus.util.os.getcwd', lambda: '/path/to/cwd')
@@ -308,5 +325,6 @@ class TestUtil(TestCase):
             self.assertEqual(get_working_dir(), '/path/to/pwd')
         finally:
             util.os.stat = _old_os_stat
+
 
 test_suite = EasyTestSuite(__name__)

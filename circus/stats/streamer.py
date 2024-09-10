@@ -6,14 +6,15 @@ import socket
 
 import zmq
 import zmq.utils.jsonapi as json
-from zmq.eventloop import ioloop, zmqstream
+from tornado import ioloop
+from zmq.eventloop import zmqstream
 
 from circus.commands import get_commands
 from circus.client import CircusClient
 from circus.stats.collector import WatcherStatsCollector, SocketStatsCollector
 from circus.stats.publisher import StatsPublisher
 from circus import logger
-from circus.py3compat import s
+from circus.util import to_str
 
 
 class StatsStreamer(object):
@@ -26,7 +27,7 @@ class StatsStreamer(object):
         self.sub_socket = self.ctx.socket(zmq.SUB)
         self.sub_socket.setsockopt(zmq.SUBSCRIBE, self.topic)
         self.sub_socket.connect(self.pubsub_endpoint)
-        self.loop = loop or ioloop.IOLoop.instance()
+        self.loop = loop or ioloop.IOLoop.current()
         self.substream = zmqstream.ZMQStream(self.sub_socket, self.loop)
         self.substream.on_recv(self.handle_recv)
         self.client = CircusClient(context=self.ctx, endpoint=endpoint,
@@ -183,7 +184,7 @@ class StatsStreamer(object):
         logger.debug('Received an event from circusd: %s' % str(data))
         topic, msg = data
         try:
-            topic = s(topic)
+            topic = to_str(topic)
             watcher = topic.split('.')[1:-1][0]
             action = topic.split('.')[-1]
             msg = json.loads(msg)

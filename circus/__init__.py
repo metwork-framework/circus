@@ -1,10 +1,13 @@
+"""Circus is a program that will let you run and watch multiple processes and sockets."""
 import logging
 import os
 import warnings
 
 
-version_info = (0, 13, 1)
-__version__ = ".".join(map(str, version_info))
+version_info = (0, 18, 0, "mf", 2)
+__version__ = (
+    ".".join(map(str, version_info[:3])) + "+" + ".".join(map(str, version_info[3:]))
+)
 
 # This config call is done to avoid any
 #     "no handlers could be found for logger"

@@ -2,8 +2,9 @@ import errno
 import os
 import sys
 
-from zmq.eventloop import ioloop
+from circus import logger
 
+from tornado import ioloop
 
 class Redirector(object):
 
@@ -40,14 +41,22 @@ class Redirector(object):
         self.running = False
         self.pipes = {}
         self._active = {}
+        self._reused_fd = set()
         self.redirect = {'stdout': stdout_redirect, 'stderr': stderr_redirect}
         self.buffer = buffer
-        self.loop = loop or ioloop.IOLoop.instance()
+        self.loop = loop or ioloop.IOLoop.current()
 
     def _start_one(self, fd, stream_name, process, pipe):
         if fd not in self._active:
             handler = self.Handler(self, stream_name, process, pipe)
-            self.loop.add_handler(fd, handler, ioloop.IOLoop.READ)
+            try:
+                self.loop.add_handler(fd, handler, ioloop.IOLoop.READ)
+            except ValueError:
+                logger.warning("Handler already exists for %s => "
+                               "We add it to the reused list" % fd)
+                self.loop.remove_handler(fd)
+                self.loop.add_handler(fd, handler, ioloop.IOLoop.READ)
+                self._reused_fd.add(fd)
             self._active[fd] = handler
             return 1
         return 0
@@ -61,6 +70,11 @@ class Redirector(object):
         return count
 
     def _stop_one(self, fd):
+        if fd in self._reused_fd:
+            logger.warning("Stopping a reused fd (%s) => "
+                           "We only remove it from the reused list" % fd)
+            self._reused_fd.discard(fd)
+            return 1
         if fd in self._active:
             self.loop.remove_handler(fd)
             del self._active[fd]

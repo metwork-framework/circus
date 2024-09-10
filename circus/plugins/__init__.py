@@ -7,14 +7,14 @@ import argparse
 
 import zmq
 import zmq.utils.jsonapi as json
-from zmq.eventloop import ioloop, zmqstream
+from tornado import ioloop
+from zmq.eventloop import zmqstream
 
 from circus import logger, __version__
 from circus.client import make_message, cast_message
-from circus.py3compat import b, s
 from circus.util import (debuglog, to_bool, resolve_name, configure_logger,
                          DEFAULT_ENDPOINT_DEALER, DEFAULT_ENDPOINT_SUB,
-                         get_connection)
+                         get_connection, to_str, to_bytes)
 
 
 class CircusPlugin(object):
@@ -39,7 +39,7 @@ class CircusPlugin(object):
         self.endpoint = endpoint
         self.check_delay = check_delay
         self.ssh_server = ssh_server
-        self._id = b(uuid.uuid4().hex)
+        self._id = to_bytes(uuid.uuid4().hex)
         self.running = False
         self.loop = ioloop.IOLoop()
 
@@ -58,6 +58,7 @@ class CircusPlugin(object):
 
     @debuglog
     def start(self):
+        self.loop.make_current()
         if not self.active:
             raise ValueError('Will not start an inactive plugin')
         self.handle_init()
@@ -150,7 +151,7 @@ class CircusPlugin(object):
     @staticmethod
     def split_data(data):
         topic, msg = data
-        topic_parts = s(topic).split(".")
+        topic_parts = to_str(topic).split(".")
         return topic_parts[1], topic_parts[2], msg
 
     @staticmethod
@@ -159,7 +160,9 @@ class CircusPlugin(object):
 
 
 def _cfg2str(cfg):
-    return ':::'.join(['%s:%s' % (key, val) for key, val in cfg.items()])
+    return ':::'.join([
+         '%s:%s' % (key, val) for key, val in sorted(cfg.items())
+    ])
 
 
 def _str2cfg(data):

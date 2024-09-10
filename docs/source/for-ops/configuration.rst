@@ -63,10 +63,6 @@ circus - single section
     **pubsub_endpoint**
         The ZMQ PUB/SUB socket receiving publications of events.
         (default: *tcp://127.0.0.1:5556*)
-    **papa_endpoint**
-        If using :ref:`papa`, you can specify the endpoint, such as
-        *ipc://var/run/circusd.sock*.
-        (default: *tcp://127.0.0.1:20202*)
     **statsd**
         If set to True, Circus runs the circusd-stats daemon. (default: False)
     **stats_endpoint**
@@ -124,7 +120,7 @@ circus - single section
         A path to an INI, JSON or YAML file to configure standard Python
         logging for the Arbiter.  The special value "default" uses the builtin
         logging configuration based on the optional loglevel and logoutput options.
-	
+
         **Example YAML Configuration File**
 
     .. code-block:: yaml
@@ -332,6 +328,7 @@ watcher:NAME - as many sections as you want
         **before_spawn**, **after_spawn**,
         **before_stop**, **after_stop**,
         **before_signal**, **after_signal**,
+        **before_reap**, **after_reap**,
         **extended_stats**
 
         Define callback functions that hook into the watcher startup/shutdown process.
@@ -371,9 +368,6 @@ watcher:NAME - as many sections as you want
         If set to False, the processes handled by a watcher will not be
         respawned automatically. The processes can be manually respawned with
         the `start` command. (default: True)
-
-    **use_papa**
-        Set to true to use the :ref:`papa`.
 
 
 
@@ -416,9 +410,6 @@ socket:NAME - as many sections as you want
     **blocking**
         If `True`, socket is set to blocking. If `False`, socket is set to non-blocking.
         (default: False)
-
-    **use_papa**
-        Set to true to use the :ref:`papa`.
 
 
 Once a socket is created, the *${circus.sockets.NAME}* string can be used in the
@@ -758,4 +749,3 @@ Example:
     stdout_stream.class = FancyStdoutStream
     stdout_stream.color = green
     stdout_stream.time_format = %Y/%m/%d | %H:%M:%S
-

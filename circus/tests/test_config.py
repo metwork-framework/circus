@@ -1,6 +1,6 @@
 import os
 import signal
-from mock import patch
+from unittest.mock import patch
 
 from circus import logger
 from circus.arbiter import Arbiter
@@ -9,8 +9,7 @@ from circus.watcher import Watcher
 from circus.process import Process
 from circus.sockets import CircusSocket
 from circus.tests.support import TestCase, EasyTestSuite, IS_WINDOWS
-from circus.util import replace_gnu_args
-from circus.py3compat import PY2
+from circus.util import replace_gnu_args, configure_logger
 
 
 HERE = os.path.join(os.path.dirname(__file__))
@@ -46,6 +45,7 @@ _CONF = {
     'issue680': os.path.join(CONFIG_DIR, 'issue680.ini'),
     'virtualenv': os.path.join(CONFIG_DIR, 'virtualenv.ini'),
     'empty_section': os.path.join(CONFIG_DIR, 'empty_section.ini'),
+    'issue1088': os.path.join(CONFIG_DIR, 'issue1088.ini')
 }
 
 
@@ -192,7 +192,7 @@ class TestConfig(TestCase):
         """https://github.com/circus-tent/circus/pull/473"""
         try:
             get_config(_CONF['empty_include'])
-        except:
+        except:  # noqa: E722
             self.fail('Non-existent includes should not raise')
         self.assertTrue(mock_logger_warn.called)
 
@@ -276,10 +276,7 @@ class TestConfig(TestCase):
         watchers = conf['watchers']
         self.assertEqual(len(watchers), 3)
         watchers = conf['watchers']
-        if PY2:
-            watchers.sort()
-        else:
-            watchers = sorted(watchers, key=lambda a: a['__name__'])
+        watchers = sorted(watchers, key=lambda a: a['__name__'])
         self.assertEqual(watchers[2]['env']['INI'], 'private.ini')
         self.assertEqual(conf['check_delay'], 555)
 
@@ -386,6 +383,18 @@ class TestConfig(TestCase):
         conf = get_config(_CONF['empty_section'])
         self.assertEqual([], conf.get('sockets'))
         self.assertEqual([], conf.get('plugins'))
+
+    def test_issue1088(self):
+        # #1088 - graceful_timeout should be float
+        conf = get_config(_CONF['issue1088'])
+        watcher = conf['watchers'][0]
+        self.assertEqual(watcher['graceful_timeout'], 25.5)
+        watcher = Watcher.load_from_config(conf['watchers'][0])
+        watcher.stop()
+
+    def test_syslog_configuration(self):
+        # this test will fail, if the syslog formatter is configured incorrectly
+        configure_logger(None, output='syslog://localhost:514?test')
 
 
 test_suite = EasyTestSuite(__name__)

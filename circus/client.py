@@ -1,5 +1,3 @@
-
-# -*- coding: utf-8 -
 import errno
 import uuid
 
@@ -7,10 +5,10 @@ import zmq
 import zmq.utils.jsonapi as json
 from zmq.eventloop.zmqstream import ZMQStream
 import tornado
+from tornado import concurrent
 
 from circus.exc import CallError
-from circus.py3compat import string_types, b
-from circus.util import DEFAULT_ENDPOINT_DEALER, get_connection
+from circus.util import DEFAULT_ENDPOINT_DEALER, get_connection, to_bytes
 
 
 def make_message(command, **props):
@@ -31,14 +29,14 @@ class AsyncCircusClient(object):
                  timeout=5.0, ssh_server=None, ssh_keyfile=None):
         self._init_context(context)
         self.endpoint = endpoint
-        self._id = b(uuid.uuid4().hex)
+        self._id = to_bytes(uuid.uuid4().hex)
         self.socket = self.context.socket(zmq.DEALER)
         self.socket.setsockopt(zmq.IDENTITY, self._id)
         self.socket.setsockopt(zmq.LINGER, 0)
         get_connection(self.socket, endpoint, ssh_server, ssh_keyfile)
         self._timeout = timeout
         self.timeout = timeout * 1000
-        self.stream = ZMQStream(self.socket, tornado.ioloop.IOLoop.instance())
+        self.stream = ZMQStream(self.socket, tornado.ioloop.IOLoop.current())
 
     def _init_context(self, context):
         self.context = context or zmq.Context.instance()
@@ -57,7 +55,7 @@ class AsyncCircusClient(object):
 
     @tornado.gen.coroutine
     def call(self, cmd):
-        if isinstance(cmd, string_types):
+        if isinstance(cmd, str):
             raise DeprecationWarning('call() takes a mapping')
 
         call_id = uuid.uuid4().hex
@@ -68,12 +66,20 @@ class AsyncCircusClient(object):
             raise CallError(str(e))
 
         try:
-            yield tornado.gen.Task(self.stream.send, cmd)
+            future = concurrent.Future()
+
+            def cb(msg, status):
+                future.set_result(msg)
+            self.stream.send(cmd, callback=cb)
+            yield future
         except zmq.ZMQError as e:
             raise CallError(str(e))
 
         while True:
-            messages = yield tornado.gen.Task(self.stream.on_recv)
+            future = concurrent.Future()
+            self.stream.on_recv(future.set_result)
+            messages = yield future
+
             for message in messages:
                 try:
                     res = json.loads(message)
@@ -90,7 +96,7 @@ class CircusClient(object):
                  timeout=5.0, ssh_server=None, ssh_keyfile=None):
         self._init_context(context)
         self.endpoint = endpoint
-        self._id = b(uuid.uuid4().hex)
+        self._id = to_bytes(uuid.uuid4().hex)
         self.socket = self.context.socket(zmq.DEALER)
         self.socket.setsockopt(zmq.IDENTITY, self._id)
         self.socket.setsockopt(zmq.LINGER, 0)
@@ -116,7 +122,7 @@ class CircusClient(object):
         return self.call(make_message(command, **props))
 
     def call(self, cmd):
-        if isinstance(cmd, string_types):
+        if isinstance(cmd, str):
             raise DeprecationWarning('call() takes a mapping')
 
         call_id = uuid.uuid4().hex

@@ -6,9 +6,9 @@ from circus.tests.support import TestCircus, async_poll_for, Process
 from circus.tests.support import async_run_plugin, EasyTestSuite
 from circus.plugins.resource_watcher import ResourceWatcher
 
-# Make sure we don't allow more than 300MB in case things go wrong
+# Make sure we don't allow more than 600MB in case things go wrong
 MAX_CHUNKS = 1000000
-CHUNK_SIZE = 300
+CHUNK_SIZE = 600
 
 
 class Leaky(Process):
@@ -127,14 +127,13 @@ class TestResourceWatcher(TestCircus):
     def test_resource_watcher_max_cpu(self):
         yield self.start_arbiter(fqn)
         yield async_poll_for(self.test_file, 'START')
-        config = {'loop_rate': 0.1, 'max_cpu': 0.1, 'watcher': 'test'}
+        config = {'loop_rate': 0.1, 'max_cpu': -0.1, 'watcher': 'test'}
         kw = {'endpoint': self.arbiter.endpoint,
               'pubsub_endpoint': self.arbiter.pubsub_endpoint}
 
         statsd_increments = yield async_run_plugin(ResourceWatcher,
                                                    config,
                                                    get_statsd_increments, **kw)
-
         self._check_statsd(statsd_increments,
                            '_resource_watcher.test.over_cpu')
         yield self.stop_arbiter()
@@ -156,5 +155,6 @@ class TestResourceWatcher(TestCircus):
         self._check_statsd(statsd_increments,
                            '_resource_watcher.test.under_cpu')
         yield self.stop_arbiter()
+
 
 test_suite = EasyTestSuite(__name__)

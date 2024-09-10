@@ -10,24 +10,15 @@ import shutil
 import functools
 import multiprocessing
 import socket
-try:
-    import sysconfig
-    DEBUG = sysconfig.get_config_var('Py_DEBUG') == 1
-except ImportError:
-    # py2.6, we don't really care about that flage here
-    # since no one will run Python --with-pydebug in 2.6
-    DEBUG = 0
+import sysconfig
+import concurrent
 
-try:
-    from unittest import skip, skipIf, TestCase, TestSuite, findTestCases
-except ImportError:
-    from unittest2 import skip, skipIf, TestCase, TestSuite  # NOQA
-    from unittest2 import findTestCases  # NOQA
+from unittest import skip, skipIf, TestCase, TestSuite, findTestCases  # noqa: F401
 
 from tornado.testing import AsyncTestCase
-from zmq.eventloop import ioloop
-import mock
+from unittest import mock
 import tornado
+from zmq import ZMQError
 
 from circus import get_arbiter
 from circus.client import AsyncCircusClient, make_message
@@ -36,7 +27,8 @@ from circus.util import tornado_sleep, ConflictError
 from circus.util import IS_WINDOWS
 from circus.watcher import Watcher
 
-ioloop.install()
+DEBUG = sysconfig.get_config_var('Py_DEBUG') == 1
+
 if 'ASYNC_TEST_TIMEOUT' not in os.environ:
     os.environ['ASYNC_TEST_TIMEOUT'] = '30'
 
@@ -59,69 +51,8 @@ SLEEP = PYTHON + " -c 'import time;time.sleep(%d)'"
 
 
 def get_ioloop():
-    from zmq.eventloop.ioloop import ZMQPoller
-    from zmq.eventloop.ioloop import ZMQError, ETERM
-    from tornado.ioloop import PollIOLoop
-
-    class DebugPoller(ZMQPoller):
-        def __init__(self):
-            super(DebugPoller, self).__init__()
-            self._fds = []
-
-        def register(self, fd, events):
-            if fd not in self._fds:
-                self._fds.append(fd)
-            return self._poller.register(fd, self._map_events(events))
-
-        def modify(self, fd, events):
-            if fd not in self._fds:
-                self._fds.append(fd)
-            return self._poller.modify(fd, self._map_events(events))
-
-        def unregister(self, fd):
-            if fd in self._fds:
-                self._fds.remove(fd)
-            return self._poller.unregister(fd)
-
-        def poll(self, timeout):
-            """
-            #737 - For some reason the poller issues events with
-            unexistant FDs, usually with big ints. We have not found yet the
-            reason of this
-            behavior that happens only during the tests. But by filtering out
-            those events, everything works fine.
-
-            """
-            z_events = self._poller.poll(1000*timeout)
-            return [(fd, self._remap_events(evt)) for fd, evt in z_events
-                    if fd in self._fds]
-
-    class DebugLoop(PollIOLoop):
-        def initialize(self, **kwargs):
-            PollIOLoop.initialize(self, impl=DebugPoller(), **kwargs)
-
-        def handle_callback_exception(self, callback):
-            exc_type, exc_value, tb = sys.exc_info()
-            raise exc_value
-
-        @staticmethod
-        def instance():
-            PollIOLoop.configure(DebugLoop)
-            return PollIOLoop.instance()
-
-        def start(self):
-            try:
-                super(DebugLoop, self).start()
-            except ZMQError as e:
-                if e.errno == ETERM:
-                    # quietly return on ETERM
-                    pass
-                else:
-                    raise e
-
     from tornado import ioloop
-    ioloop.IOLoop.configure(DebugLoop)
-    return ioloop.IOLoop.instance()
+    return ioloop.IOLoop.current()
 
 
 def get_available_port():
@@ -143,6 +74,8 @@ class MockWatcher(Watcher):
 
 
 class TestCircus(AsyncTestCase):
+    # how many times we will try when "Address already in use"
+    ADDRESS_IN_USE_TRY_TIMES = 7
 
     arbiter_factory = get_arbiter
     arbiters = []
@@ -217,11 +150,26 @@ class TestCircus(AsyncTestCase):
                       stdout_stream=None, debug=True, **kw):
         testfile, arbiter = self._create_circus(
             cmd, stdout_stream=stdout_stream,
-            debug=debug, async=True, **kw)
+            debug=debug, use_async=True, **kw)
         self.test_file = testfile
         self.arbiter = arbiter
         self.arbiters.append(arbiter)
-        yield self.arbiter.start()
+        for i in range(self.ADDRESS_IN_USE_TRY_TIMES):
+            try:
+                yield self.arbiter.start()
+            except ZMQError as e:
+                if e.strerror == 'Address already in use':
+                    # One more try to wait for the port being released by the OS
+                    yield tornado_sleep(0.1)
+                    continue
+                else:
+                    raise e
+            else:
+                # Everything goes well, just break
+                break
+        else:
+            # Cannot start after tries
+            raise RuntimeError('Cannot start arbiter after %s times try' % self.ADDRESS_IN_USE_TRY_TIMES)
 
     @tornado.gen.coroutine
     def stop_arbiter(self):
@@ -265,7 +213,8 @@ class TestCircus(AsyncTestCase):
 
     @classmethod
     def _create_circus(cls, callable_path, plugins=None, stats=False,
-                       async=False, arbiter_kw=None, **kw):
+                       use_async=False, arbiter_kw=None,
+                       respawn=True, **kw):
         fd, testfile = mkstemp()
         os.close(fd)
         wdir = os.path.dirname(os.path.dirname(os.path.dirname(
@@ -292,7 +241,7 @@ class TestCircus(AsyncTestCase):
             arbiter_kw['stats_endpoint'] = "tcp://127.0.0.1:%d" % _gp()
             arbiter_kw['statsd_close_outputs'] = not debug
 
-        if async:
+        if use_async:
             arbiter_kw['background'] = False
             arbiter_kw['loop'] = get_ioloop()
         else:
@@ -544,7 +493,7 @@ class FakeProcess(object):
         pass
 
 
-class MagicMockFuture(mock.MagicMock, tornado.concurrent.Future):
+class MagicMockFuture(mock.MagicMock, concurrent.futures.Future):
 
     def cancel(self):
         return False

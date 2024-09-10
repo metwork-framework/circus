@@ -67,5 +67,5 @@ class StdinSocketTest(TestCircus):
         except Exception:
             raised = True
         self.assertTrue(raised)
-
+ 
         yield self.stop_arbiter()
