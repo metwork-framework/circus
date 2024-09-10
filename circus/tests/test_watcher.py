@@ -27,7 +27,6 @@ from circus.tests.support import async_poll_for, EasyTestSuite
 from circus.tests.support import MagicMockFuture, skipIf, IS_WINDOWS
 from circus.tests.support import PYTHON
 from circus.util import get_python_version, tornado_sleep, to_str
-from circus.util import to_signum
 from circus.watcher import Watcher
 
 if hasattr(signal, 'SIGKILL'):
@@ -47,7 +46,7 @@ class FakeProcess(object):
         self.started = started
         self.age = age
         self.stopping = False
-        self.stop_signal = to_signum(SIGKILL)
+        self.send_signal = send_signal
 
     def returncode(self):
         return 0
@@ -64,6 +63,8 @@ class FakeProcess(object):
     def wait(self, *args, **kwargs):
         pass
 
+    def send_signal(signum)
+        pass
 
 class TestWatcher(TestCircus):
 
