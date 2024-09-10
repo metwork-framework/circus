@@ -215,6 +215,7 @@ class TestCircus(AsyncTestCase):
     def _create_circus(cls, callable_path, plugins=None, stats=False,
                        use_async=False, arbiter_kw=None,
                        respawn=True, **kw):
+        print("JBV, enter _create_circus")
         fd, testfile = mkstemp()
         os.close(fd)
         wdir = os.path.dirname(os.path.dirname(os.path.dirname(
