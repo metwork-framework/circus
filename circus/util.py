@@ -689,7 +689,7 @@ class CrashWhenError(logging.Handler):
             crash_on_error = os.getenv("CRASH_ON_ERROR", True)
             try:
                 sys.stderr.write("log with level >= logging.ERROR detected\n")
-                if crash_on_error
+                if crash_on_error:
                     sys.stderr.write("    => we will stop here\n")
                 sys.stderr.flush()
             except Exception:
