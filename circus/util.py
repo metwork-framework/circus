@@ -686,7 +686,7 @@ class CrashWhenError(logging.Handler):
 
     def emit(self, record):
         if record.levelno >= logging.ERROR:
-            crash_on_error = os.getenv("CRASH_ON_ERROR", True)
+            crash_on_error = os.getenv("CIRCUS_CRASH_ON_ERROR", True)
             if crash_on_error == 'False':
                 crash_on_error = False
             else:
