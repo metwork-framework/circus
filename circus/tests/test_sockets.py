@@ -179,6 +179,7 @@ class TestSockets(TestCase):
         config = {'name': '', 'host': '::1', 'port': 0,
                   'family': 'AF_INET6'}
         sock = CircusSocket.load_from_config(config)
+        print("JBV, sock : ", sock)
         self.assertEqual(sock.host, config['host'])
         self.assertEqual(sock.port, config['port'])
         sock.setsockopt = mock.Mock()

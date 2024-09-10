@@ -247,7 +247,6 @@ class TestCircus(AsyncTestCase):
         else:
             arbiter_kw['background'] = True
 
-        print("JBV, worker", [worker])
         arbiter = cls.arbiter_factory([worker], plugins=plugins, **arbiter_kw)
         cls.arbiters.append(arbiter)
         return testfile, arbiter
