@@ -286,6 +286,8 @@ class TestWatcherInitialization(TestCircus):
             minor = py_version[1]
             wanted = os.path.join(venv, 'lib', 'python%d.%d' % (major, minor),
                                   'site-packages')
+            if not os.path.exists(wanted):
+                os.makedirs(wanted)
             ppath = watcher.watcher.env['PYTHONPATH']
         finally:
             yield watcher.stop()
