@@ -886,11 +886,13 @@ def load_virtualenv(watcher, py_ver=None):
     def determine_sitedir():
         try_dirs = ['python', 'pypy']
         tried_dirs = []
+        print("JBV watcher.virtualenv : %s", watcher.virtualenv)
         for try_dir in try_dirs:
             # XXX Posix scheme - need to add others
             _sitedir = os.path.join(watcher.virtualenv, 'lib', '%s%s' % (try_dir, py_ver),
                                     'site-packages')
             tried_dirs.append(_sitedir)
+            print("JBV _sitedir : %s", _sitedir)
             if os.path.exists(_sitedir):
                 return _sitedir
 
