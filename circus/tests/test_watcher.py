@@ -627,10 +627,11 @@ class RespawnTest(TestCircus):
 
     @tornado.testing.gen_test
     def test_not_respawning(self):
-        oneshot_process = 'circus.tests.test_watcher.oneshot_process'
+        oneshot_process = 'circus.tests.oneshot_process'
         print("JBV 0")
         testfile, arbiter = self._create_circus(oneshot_process,
-                                                respawn=False, use_async=True)
+                                                respawn=False,
+                                                use_async=True)
         print("JBV 1")
         yield arbiter.start()
         print("JBV 2")
