@@ -629,7 +629,7 @@ class RespawnTest(TestCircus):
     def test_not_respawning(self):
         oneshot_process = 'circus.tests.test_watcher.oneshot_process'
         testfile, arbiter = self._create_circus(oneshot_process,
-                               i                stdout_stream={'stream': self.stream},
+                                                stdout_stream={'stream': self.stream},
                                                 stderr_stream={'stream': self.errstream},
                                                 debug=True,
                                                 respawn=False,
