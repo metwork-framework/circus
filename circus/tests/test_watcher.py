@@ -47,7 +47,7 @@ class FakeProcess(object):
         self.started = started
         self.age = age
         self.stopping = False
-        self.stop_signal = util.to_signum(SIGKILL)
+        self.stop_signal = to_signum(SIGKILL)
 
     def returncode(self):
         return 0
