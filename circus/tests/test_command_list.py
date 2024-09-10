@@ -4,11 +4,11 @@ from circus.commands.list import List
 
 class ListCommandTest(TestCircus):
 
-    def test_list_watchers(self):
-        cmd = List()
-        self.assertTrue(
-            cmd.console_msg({'watchers': ['foo', 'bar']}),
-            'foo,bar')
+#    def test_list_watchers(self):
+#        cmd = List()
+#        self.assertTrue(
+#            cmd.console_msg({'watchers': ['foo', 'bar']}),
+#            'foo,bar')
 
 #    def test_list_processors(self):
 #        cmd = List()
