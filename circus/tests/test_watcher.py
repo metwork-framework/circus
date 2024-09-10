@@ -62,7 +62,7 @@ class FakeProcess(object):
     def wait(self, *args, **kwargs):
         pass
 
-    def send_signal(signum)
+    def send_signal(signum):
         pass
 
 
