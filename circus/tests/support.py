@@ -223,20 +223,24 @@ class TestCircus(AsyncTestCase):
         args = ['circus/tests/generic.py', callable_path, testfile]
         worker = {'cmd': PYTHON, 'args': args, 'working_dir': wdir,
                   'name': 'test', 'graceful_timeout': 2}
+        print("JBV 1")
         worker.update(kw)
         if not arbiter_kw:
             arbiter_kw = {}
         debug = arbiter_kw['debug'] = kw.get('debug',
                                              arbiter_kw.get('debug', False))
+        print("JBV 2")
         # -1 => no periodic callback to manage_watchers by default
         arbiter_kw['check_delay'] = kw.get('check_delay',
                                            arbiter_kw.get('check_delay', -1))
 
+        print("JBV 3")
         _gp = get_available_port
         arbiter_kw['controller'] = "tcp://127.0.0.1:%d" % _gp()
         arbiter_kw['pubsub_endpoint'] = "tcp://127.0.0.1:%d" % _gp()
         arbiter_kw['multicast_endpoint'] = "udp://237.219.251.97:12027"
 
+        print("JBV 4")
         if stats:
             arbiter_kw['statsd'] = True
             arbiter_kw['stats_endpoint'] = "tcp://127.0.0.1:%d" % _gp()
@@ -248,8 +252,10 @@ class TestCircus(AsyncTestCase):
         else:
             arbiter_kw['background'] = True
 
+        print("JBV 5")
         arbiter = cls.arbiter_factory([worker], plugins=plugins, **arbiter_kw)
         cls.arbiters.append(arbiter)
+        print("JBV 6")
         return testfile, arbiter
 
     @tornado.gen.coroutine
