@@ -692,7 +692,7 @@ class CrashWhenError(logging.Handler):
                 sys.stderr.flush()
             except Exception:
                 pass
-            os._exit(2)
+            #os._exit(2)
 
 
 def configure_logger(logger, level='INFO', output="-", loggerconfig=None,
