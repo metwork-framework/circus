@@ -259,15 +259,18 @@ class TestWatcherInitialization(TestCircus):
     def test_venv(self):
         venv = os.path.join(os.path.dirname(__file__), 'venv')
         watcher = SomeWatcher(virtualenv=venv)
+        py_version = get_python_version()
+        major = py_version[0]
+        minor = py_version[1]
+        wanted = os.path.join(venv, 'lib', 'python%d.%d' % (major, minor),
+                              'site-packages')
+        if not os.path.exists(wanted):
+            print("JBV 1 os.makedirs ", wanted)
+            os.makedirs(wanted)
+        else:
+            print("JBV 1 existing ", wanted)
         yield watcher.run()
         try:
-            py_version = get_python_version()
-            major = py_version[0]
-            minor = py_version[1]
-            wanted = os.path.join(venv, 'lib', 'python%d.%d' % (major, minor),
-                                  'site-packages')
-            if not os.path.exists(wanted):
-                os.makedirs(wanted)
             ppath = watcher.watcher.env['PYTHONPATH']
         finally:
             yield watcher.stop()
@@ -284,10 +287,10 @@ class TestWatcherInitialization(TestCircus):
         wanted = os.path.join(venv, 'lib', 'python%d.%d' % (major, minor),
                               'site-packages')
         if not os.path.exists(wanted):
-            print("JBV os.makedirs ", wanted)
+            print("JBV 2 os.makedirs ", wanted)
             os.makedirs(wanted)
         else:
-            print("JBV existing ", wanted)
+            print("JBV 2 existing ", wanted)
         yield watcher.run()
         try:
             yield tornado_sleep(1)
@@ -297,24 +300,27 @@ class TestWatcherInitialization(TestCircus):
 
         self.assertTrue(wanted in ppath.split(os.pathsep))
 
-#    @skipIf(IS_WINDOWS, "virtualenv not supported yet on Windows")
-#    @tornado.testing.gen_test
-#    def test_venv_py_ver(self):
-#        py_ver = "my_py_ver"
-#        venv = os.path.join(os.path.dirname(__file__), 'venv')
-#        watcher = SomeWatcher(virtualenv=venv, virtualenv_py_ver=py_ver)
-#        try:
-#            yield tornado_sleep(1)
-#            wanted = os.path.join(venv, 'lib', 'python%s' % py_ver,
-#                                  'site-packages')
-#            if not os.path.exists(wanted):
-#                os.makedirs(wanted)
-#            yield watcher.run()
-#            ppath = watcher.watcher.env['PYTHONPATH']
-#        finally:
-#            yield watcher.stop()
-#
-#        self.assertTrue(wanted in ppath.split(os.pathsep))
+    @skipIf(IS_WINDOWS, "virtualenv not supported yet on Windows")
+    @tornado.testing.gen_test
+    def test_venv_py_ver(self):
+        py_ver = "my_py_ver"
+        venv = os.path.join(os.path.dirname(__file__), 'venv')
+        watcher = SomeWatcher(virtualenv=venv, virtualenv_py_ver=py_ver)
+        wanted = os.path.join(venv, 'lib', 'python%s' % py_ver,
+                              'site-packages')
+        if not os.path.exists(wanted):
+            print("JBV 3 os.makedirs ", wanted)
+            os.makedirs(wanted)
+        else:
+            print("JBV 3 existing ", wanted)
+        yield watcher.run()
+        try:
+            yield tornado_sleep(1)
+            ppath = watcher.watcher.env['PYTHONPATH']
+        finally:
+            yield watcher.stop()
+
+        self.assertTrue(wanted in ppath.split(os.pathsep))
 
 
 class SomeWatcher(object):
