@@ -66,6 +66,7 @@ class StdinSocketTest(TestCircus):
             yield self.start_arbiter(stdin_socket='test')
         except Exception:
             raised = True
+            pass
         self.assertTrue(raised)
  
         yield self.stop_arbiter()
