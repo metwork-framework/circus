@@ -691,7 +691,6 @@ class CrashWhenError(logging.Handler):
                 crash_on_error = False
             else:
                 crash_on_error = True
-            print("JBV, crash_on_error", crash_on_error)
             try:
                 sys.stderr.write("log with level >= logging.ERROR detected\n")
                 if crash_on_error:
