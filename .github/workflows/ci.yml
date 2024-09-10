@@ -28,5 +28,4 @@ jobs:
       run: pip install tox coveralls
     - name: Run test suite
       run: |
-        export CRASH_ON_ERROR=False
         tox -v -e py
