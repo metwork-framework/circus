@@ -687,6 +687,10 @@ class CrashWhenError(logging.Handler):
     def emit(self, record):
         if record.levelno >= logging.ERROR:
             crash_on_error = os.getenv("CRASH_ON_ERROR", True)
+            if crash_on_error == 'False':
+                crash_on_error = False
+            else:
+                crash_on_error = True
             print("JBV, crash_on_error", crash_on_error)
             try:
                 sys.stderr.write("log with level >= logging.ERROR detected\n")
