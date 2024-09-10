@@ -12,6 +12,7 @@ class ListCommandTest(TestCircus):
 
     def test_list_processors(self):
         cmd = List()
+        print("JBV, cmd.console_msg : ", cmd.console_msg)
         self.assertTrue(
             cmd.console_msg({'pids': [12, 13]}), '12,13')
 
