@@ -265,10 +265,7 @@ class TestWatcherInitialization(TestCircus):
         wanted = os.path.join(venv, 'lib', 'python%d.%d' % (major, minor),
                               'site-packages')
         if not os.path.exists(wanted):
-            print("JBV 1 os.makedirs ", wanted)
             os.makedirs(wanted)
-        else:
-            print("JBV 1 existing ", wanted)
         yield watcher.run()
         try:
             ppath = watcher.watcher.env['PYTHONPATH']
@@ -287,10 +284,7 @@ class TestWatcherInitialization(TestCircus):
         wanted = os.path.join(venv, 'lib', 'python%d.%d' % (major, minor),
                               'site-packages')
         if not os.path.exists(wanted):
-            print("JBV 2 os.makedirs ", wanted)
             os.makedirs(wanted)
-        else:
-            print("JBV 2 existing ", wanted)
         yield watcher.run()
         try:
             yield tornado_sleep(1)
@@ -309,10 +303,7 @@ class TestWatcherInitialization(TestCircus):
         wanted = os.path.join(venv, 'lib', 'python%s' % py_ver,
                               'site-packages')
         if not os.path.exists(wanted):
-            print("JBV 3 os.makedirs ", wanted)
             os.makedirs(wanted)
-        else:
-            print("JBV 3 existing ", wanted)
         yield watcher.run()
         try:
             yield tornado_sleep(1)
