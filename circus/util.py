@@ -686,11 +686,7 @@ class CrashWhenError(logging.Handler):
 
     def emit(self, record):
         if record.levelno >= logging.ERROR:
-            crash_on_error = os.getenv("CIRCUS_CRASH_ON_ERROR", True)
-            if crash_on_error == 'False':
-                crash_on_error = False
-            else:
-                crash_on_error = True
+            crash_on_error = int(os.getenv("CIRCUS_CRASH_ON_ERROR", 1))
             try:
                 sys.stderr.write("log with level >= logging.ERROR detected\n")
                 if crash_on_error:
